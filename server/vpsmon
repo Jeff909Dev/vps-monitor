@@ -1,0 +1,2071 @@
+#!/usr/bin/env python3
+"""vpsmon: health snapshot and one-click cleanup for a Linux server.
+
+The VPS Monitor Mac app runs `/usr/local/bin/vpsmon --lang <en|es> <command>` over ssh and reads one JSON object
+from stdout. vpsmon needs root and re-runs itself through `sudo -n` when it is not. docs/contract.md is the contract.
+
+Usage: vpsmon [--lang en|es] status | sample | scan [--background] | act <id> [--dry-run] | uninstall | version
+
+Testing hook: with VPSMON_PREFIX set, vpsmon's own files (state, audit log, config, script, units, sudoers rule) live
+under that prefix, and it runs as whoever starts it, without sudo. What it watches (/proc, /tmp, homes) stays real.
+"""
+
+from __future__ import annotations
+
+import fcntl
+import fnmatch
+import glob
+import json
+import os
+import pwd
+import re
+import select
+import shlex
+import shutil
+import signal
+import socket
+import stat
+import subprocess
+import sys
+import time
+from collections.abc import Callable, Iterable
+from contextlib import contextmanager
+from dataclasses import dataclass
+import functools
+from functools import cached_property
+
+HOUR = 3600
+DAY = 24 * HOUR
+WEEK = 7 * DAY
+CLOSABLE_AFTER = 30 * 60
+CLAUDE_TMP_QUIET = 6 * HOUR
+SCAN_EVERY = 6 * HOUR
+HISTORY_KEEP = 7 * DAY
+HISTORY_TRIM_AT = 1 << 20
+MIB = 1024 * 1024
+BIG_LOG = 200 * MIB
+JOURNAL_KEEP = 200 * MIB
+MAX_ITEMS = 25
+MAP_CHILDREN = 6
+# du leaves out directories smaller than this: nothing that small shows in the map, and /tmp holds hundreds of thousands.
+DU_THRESHOLD = "10M"
+# How long the scan trusts its snapshot of the paths processes use before it reads /proc again.
+PINNED_TTL = 30.0
+PRUNE_DIRS = frozenset({"node_modules", ".git"})
+# Entries of /tmp and /var/tmp that belong to the system or to a live session, whatever their age.
+SYSTEM_TMP = (
+    "systemd-private-*", "snap-private-tmp", ".X*-unix", ".X*-lock", ".ICE-unix", ".font-unix", ".Test-unix", "tmux-*",
+    "ssh-*", "vpsmon*", "lost+found",
+)
+VERSIONS_DIR = ".local/share/claude/versions"
+CLAUDE_LINK = ".local/bin/claude"
+CLOSED_NOTES = "vpsmon-closed-sessions.md"
+PKG_CACHES = (".npm/_cacache", ".cache/pip", ".cache/yarn", ".cache/go-build")
+UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+VERSION_RE = re.compile(r"\d+\.\d+\.\d+")
+HEX64_RE = re.compile(r"[0-9a-f]{64}")
+CLAUDE_TMP_RE = re.compile(r"claude-(\d+)")
+# The kernel's "Out of memory: Killed process 1234 (node)" (also from a memory cgroup), and earlyoom's kill line.
+KERNEL_OOM_RE = re.compile(r"Killed process (\d+) \((.*?)\)(?= total-vm|,|\s*$)")
+EARLYOOM_RE = re.compile(r'sending SIG\w+ to process (\d+) uid \d+ "([^"]*)"')
+UNIT_RE = re.compile(r"[A-Za-z0-9@_.:\\][A-Za-z0-9@_.:\\-]*")
+WORKER_ID_RE = re.compile(r"worker:(\d+):(\d+)")
+PROC_ID_RE = re.compile(r"proc:(\d+):(\d+)")
+SELF = os.path.realpath(__file__)
+VERSION = "0.2.0"
+SCHEMA = 2
+SYSTEMD_UNITS = "/etc/systemd/system"
+
+
+# Every user-facing string, by language. `{count}` takes a noun from Text.count, `{size}` a size from Text.size.
+MESSAGES: dict[str, dict[str, str]] = {
+    "en": {
+        "num.group": ",",
+        "noun.entry.one": "{n} entry",
+        "noun.entry.other": "{n} entries",
+        "noun.folder.one": "{n} folder",
+        "noun.folder.other": "{n} folders",
+        "noun.log.one": "{n} .log file",
+        "noun.log.other": "{n} .log files",
+        "noun.version.one": "{n} version",
+        "noun.version.other": "{n} versions",
+        "noun.deb.one": "{n} .deb package",
+        "noun.deb.other": "{n} .deb packages",
+        "noun.image.one": "{n} image",
+        "noun.image.other": "{n} images",
+        "noun.volume.one": "{n} anonymous volume",
+        "noun.volume.other": "{n} anonymous volumes",
+        "noun.item.one": "{n} item",
+        "noun.item.other": "{n} items",
+        "noun.failed.one": "{n} item could not be removed",
+        "noun.failed.other": "{n} items could not be removed",
+        "noun.process.one": "{n} process",
+        "noun.process.other": "{n} processes",
+        "action.tmp-stale.title": "Old temporary files",
+        "action.tmp-stale.detail": "{count} in /tmp and /var/tmp that no process uses, untouched for a day (a week in /var/tmp)",
+        "action.claude-tmp.title": "Closed sessions' temporary files",
+        "action.claude-tmp.detail": "{count} in /tmp/claude-* of sessions that are no longer running",
+        "action.big-logs.title": "Huge logs",
+        "action.big-logs.detail": "{count} over 200 MB that no process has open",
+        "action.claude-versions.title": "Old Claude Code versions",
+        "action.claude-versions.detail": "{count} that no session is running",
+        "action.pkg-caches.title": "npm, pip, yarn and Go caches",
+        "action.pkg-caches.detail": "They rebuild themselves on the next install",
+        "action.journal.title": "System logs (journal)",
+        "action.journal.detail": "Trims the journal to 200 MB",
+        "action.apt-cache.title": "Packages downloaded by apt",
+        "action.apt-cache.detail": "{count} already installed; apt downloads them again when needed",
+        "action.docker-images.title": "Unused Docker images",
+        "action.docker-images.detail": "{count} with no container; pulled again when a project asks for them",
+        "action.docker-volumes.title": "Unused Docker volumes",
+        "action.docker-volumes.detail": "{count} that no container uses",
+        "action.docker-build-cache.title": "Docker build cache",
+        "action.docker-build-cache.detail": "Rebuilt by the next docker build, which runs slower once",
+        "map.home.title": "Home folders",
+        "map.home.hint": "Each user's files, repos and projects",
+        "map.claude.title": "Claude Code",
+        "map.claude.hint": "Session history and settings; the app does not delete it",
+        "map.caches.title": "Caches",
+        "map.caches.hint": "npm, pip, apt and others; they rebuild themselves",
+        "map.docker.title": "Docker",
+        "map.docker.hint": "Images, containers and volumes",
+        "map.logs.title": "Logs",
+        "map.logs.hint": "/var/log and the system journal",
+        "map.temp.title": "Temporary files",
+        "map.temp.hint": "/tmp and /var/tmp",
+        "map.swap.title": "Swap",
+        "map.swap.hint": "RAM overflow: reserved, not for files",
+        "map.system.title": "System and programs",
+        "map.system.hint": "/usr, /opt, /boot and snaps",
+        "map.rest.title": "Everything else",
+        "map.rest.hint": "Folders no other group holds",
+        "act.nothing": "Nothing to free",
+        "act.would-free": "Would remove {count}",
+        "act.freed": "Removed {count}",
+        "act.failed": "{freed}; {count}",
+        "act.would-close": "Would close {name} ({count})",
+        "act.closed": "Closed {name}",
+        "act.would-end": "Would end {name} ({count})",
+        "act.ended": "Ended {name} ({count})",
+        "err.tool-start": "{tool} could not run: {detail}",
+        "err.tool-failed": "{tool} failed: {detail}",
+        "err.busy": "Another cleanup is running; wait for it to finish",
+        "err.scan-start": "Could not start the background scan",
+        "err.unknown-action": "Unknown action {id}",
+        "err.worker-id": "Not a valid session id",
+        "err.worker-gone": "That session is no longer running",
+        "err.no-session": "That process has no Claude Code session",
+        "err.not-closable": "That session has not been idle for 30 minutes; not closing it",
+        "err.became-busy": "That session just started working; not closing it",
+        "err.proc-id": "Not a valid process id",
+        "err.proc-gone": "That process is no longer running",
+        "err.not-killable": "{name} is protected; not ending it",
+        "err.no-sudo": "vpsmon needs root, and this server has no sudo",
+        "err.internal": "vpsmon internal error: {detail}",
+        "usage": "Usage: vpsmon [--lang en|es] status | sample | scan [--background] | act <id> [--dry-run] | uninstall | version",
+    },
+    "es": {
+        "num.group": ".",
+        "noun.entry.one": "{n} entrada",
+        "noun.entry.other": "{n} entradas",
+        "noun.folder.one": "{n} carpeta",
+        "noun.folder.other": "{n} carpetas",
+        "noun.log.one": "{n} fichero .log",
+        "noun.log.other": "{n} ficheros .log",
+        "noun.version.one": "{n} versión",
+        "noun.version.other": "{n} versiones",
+        "noun.deb.one": "{n} paquete .deb",
+        "noun.deb.other": "{n} paquetes .deb",
+        "noun.image.one": "{n} imagen",
+        "noun.image.other": "{n} imágenes",
+        "noun.volume.one": "{n} volumen anónimo",
+        "noun.volume.other": "{n} volúmenes anónimos",
+        "noun.item.one": "{n} elemento",
+        "noun.item.other": "{n} elementos",
+        "noun.failed.one": "{n} elemento no se pudo borrar",
+        "noun.failed.other": "{n} elementos no se pudieron borrar",
+        "noun.process.one": "{n} proceso",
+        "noun.process.other": "{n} procesos",
+        "action.tmp-stale.title": "Temporales viejos",
+        "action.tmp-stale.detail": "{count} en /tmp y /var/tmp que ningún proceso usa, sin tocar en un día (una semana en /var/tmp)",
+        "action.claude-tmp.title": "Temporales de sesiones cerradas",
+        "action.claude-tmp.detail": "{count} en /tmp/claude-* de sesiones que ya no están vivas",
+        "action.big-logs.title": "Logs enormes",
+        "action.big-logs.detail": "{count} de más de 200 MB que nadie tiene abiertos",
+        "action.claude-versions.title": "Versiones viejas de Claude Code",
+        "action.claude-versions.detail": "{count} que ningún agente está usando",
+        "action.pkg-caches.title": "Cachés de npm, pip, yarn y Go",
+        "action.pkg-caches.detail": "Se regeneran solas al instalar",
+        "action.journal.title": "Logs del sistema (journal)",
+        "action.journal.detail": "Recorta el journal a 200 MB",
+        "action.apt-cache.title": "Paquetes descargados por apt",
+        "action.apt-cache.detail": "{count} ya instalados; apt los vuelve a bajar si hace falta",
+        "action.docker-images.title": "Imágenes de Docker sin usar",
+        "action.docker-images.detail": "{count} sin ningún contenedor; se vuelven a descargar si algún proyecto las pide",
+        "action.docker-volumes.title": "Volúmenes de Docker sin usar",
+        "action.docker-volumes.detail": "{count} que ningún contenedor usa",
+        "action.docker-build-cache.title": "Caché de builds de Docker",
+        "action.docker-build-cache.detail": "Se rehace en el próximo docker build, que irá más lento una vez",
+        "map.home.title": "Carpetas personales",
+        "map.home.hint": "Archivos, repos y proyectos de cada usuario",
+        "map.claude.title": "Claude Code",
+        "map.claude.hint": "Historial de sesiones y ajustes; la app no lo borra",
+        "map.caches.title": "Cachés",
+        "map.caches.hint": "npm, pip, apt y otras; se regeneran",
+        "map.docker.title": "Docker",
+        "map.docker.hint": "Imágenes, contenedores y volúmenes",
+        "map.logs.title": "Logs",
+        "map.logs.hint": "/var/log y el journal del sistema",
+        "map.temp.title": "Temporales",
+        "map.temp.hint": "/tmp y /var/tmp",
+        "map.swap.title": "Swap",
+        "map.swap.hint": "Desborde de la RAM: reservado, no para ficheros",
+        "map.system.title": "Sistema y programas",
+        "map.system.hint": "/usr, /opt, /boot y snaps",
+        "map.rest.title": "Resto",
+        "map.rest.hint": "Carpetas que no entran en otro grupo",
+        "act.nothing": "Nada que liberar",
+        "act.would-free": "Borraría {count}",
+        "act.freed": "Borrados {count}",
+        "act.failed": "{freed}; {count}",
+        "act.would-close": "Cerraría {name} ({count})",
+        "act.closed": "Cerrado {name}",
+        "act.would-end": "Terminaría {name} ({count})",
+        "act.ended": "Terminado {name} ({count})",
+        "err.tool-start": "{tool} no se pudo ejecutar: {detail}",
+        "err.tool-failed": "{tool} falló: {detail}",
+        "err.busy": "Ya hay otra limpieza en marcha; espera a que termine",
+        "err.scan-start": "No he podido lanzar el escaneo en segundo plano",
+        "err.unknown-action": "No conozco la acción {id}",
+        "err.worker-id": "Identificador de agente no válido",
+        "err.worker-gone": "Ese agente ya no está vivo",
+        "err.no-session": "Ese agente no tiene sesión de Claude Code",
+        "err.not-closable": "Ese agente no lleva 30 minutos inactivo; no lo cierro",
+        "err.became-busy": "Ese agente acaba de ponerse a trabajar; no lo cierro",
+        "err.proc-id": "Identificador de proceso no válido",
+        "err.proc-gone": "Ese proceso ya no existe",
+        "err.not-killable": "{name} está protegido; no lo termino",
+        "err.no-sudo": "vpsmon necesita root, y este servidor no tiene sudo",
+        "err.internal": "Error interno de vpsmon: {detail}",
+        "usage": "Uso: vpsmon [--lang en|es] status | sample | scan [--background] | act <id> [--dry-run] | uninstall | version",
+    },
+}
+
+
+class Text:
+    """The strings of one language."""
+
+    def __init__(self, lang: str):
+        self.lang, self.messages = lang, MESSAGES[lang]
+
+    def __call__(self, key: str, **params) -> str:
+        return self.messages[key].format(**params)
+
+    def number(self, n: int) -> str:
+        return f"{n:,}".replace(",", self("num.group"))
+
+    def count(self, n: int, noun: str) -> str:
+        return self(f"noun.{noun}.{'one' if n == 1 else 'other'}", n=self.number(n))
+
+
+class Fail(Exception):
+    """A handled error: a message key and its params. The app shows it in --lang, as is."""
+
+    def __init__(self, key: str, **params):
+        super().__init__(key)
+        self.key, self.params = key, params
+
+    def text(self, tr: Text) -> str:
+        return tr(self.key, **self.params)
+
+    def __str__(self) -> str:
+        return self.text(Text("en"))
+
+
+class Usage(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Paths:
+    """Every filesystem location vpsmon reads or writes, so tests can point any of them at a temp dir."""
+
+    state: str = "/var/lib/vpsmon"
+    audit_log: str = "/var/log/vpsmon.log"
+    config: str = "/etc/vpsmon/config.json"
+    bin: str = "/usr/local/bin/vpsmon"
+    units: tuple[str, ...] = (f"{SYSTEMD_UNITS}/vpsmon-sample.timer", f"{SYSTEMD_UNITS}/vpsmon-sample.service")
+    sudoers: str = "/etc/sudoers.d/vpsmon"
+    proc: str = "/proc"
+    tmp: str = "/tmp"
+    var_tmp: str = "/var/tmp"
+    home: str = "/home"
+    root_home: str = "/root"
+    log_roots: tuple[str, ...] = ("/tmp", "/var/tmp", "/home", "/root", "/srv", "/opt", "/var/log")
+    journal: str = "/var/log/journal"
+    apt_archives: str = "/var/cache/apt/archives"
+
+    @classmethod
+    def under(cls, prefix: str) -> Paths:
+        """vpsmon's own files under `prefix`, the watched host as is."""
+        own = ("state", "audit_log", "config", "bin", "sudoers")
+        return cls(**{f: prefix + getattr(cls, f) for f in own}, units=tuple(prefix + u for u in cls.units))
+
+    @classmethod
+    def from_env(cls) -> Paths:
+        prefix = os.environ.get("VPSMON_PREFIX", "")
+        return cls.under(prefix) if prefix else cls()
+
+    def file(self, name: str) -> str:
+        return os.path.join(self.state, name)
+
+    def homes(self) -> list[str]:
+        """/home/* and /root: the homes whose Claude Code versions and package caches the disk actions look at."""
+        homes = [os.path.join(self.home, n) for n in listdir(self.home)] + [self.root_home]
+        return [h for h in homes if is_real_dir(h)]
+
+
+# Pure logic: no root, no /proc, no VPS.
+
+DROP_FLAGS_WITH_VALUE = frozenset({"--plugin-dir", "--resume", "-r", "--session-id"})
+DROP_FLAGS = frozenset({"--continue", "-c"})
+
+
+def resume_command(argv: list[str], session_id: str) -> str:
+    kept, i = [], 1
+    while i < len(argv):
+        arg = argv[i]
+        i += 1
+        name, has_value = arg.split("=", 1)[0], "=" in arg
+        if arg in DROP_FLAGS or (name in DROP_FLAGS_WITH_VALUE and has_value):
+            continue
+        if name in DROP_FLAGS_WITH_VALUE:
+            if i < len(argv) and not argv[i].startswith("-"):
+                i += 1
+            continue
+        kept.append(arg)
+    return shlex.join(["claude", *kept, "--resume", session_id])
+
+
+def growth_per_hour(history: list[dict], now: float) -> float | None:
+    points = [(r["at"] / HOUR, r["diskUsedBytes"]) for r in history if now - DAY <= r["at"] <= now]
+    if len(points) < 2:
+        return None
+    xs, ys = zip(*points)
+    if (max(xs) - min(xs)) * HOUR < HOUR:
+        return None
+    mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+    sxx = sum((x - mx) ** 2 for x in xs)
+    sxy = sum((x - mx) * (y - my) for x, y in points)
+    return sxy / sxx
+
+
+def full_in_hours(free: int, growth: float | None) -> float | None:
+    return free / growth if growth and growth > 0 else None
+
+
+def is_closable(state: str, last_activity: float, now: float) -> bool:
+    return state == "idle" and now - last_activity >= CLOSABLE_AFTER
+
+
+def sort_workers(workers: list[dict]) -> list[dict]:
+    rank = {"busy": 0, "idle": 1}
+    return sorted(workers, key=lambda w: (rank.get(w["state"], 2), w["lastActivity"]))
+
+
+def descendants(children: dict[int, list[int]], pid: int) -> list[int]:
+    found, queue = [], list(children.get(pid, ()))
+    while queue:
+        q = queue.pop()
+        found.append(q)
+        queue.extend(children.get(q, ()))
+    return found
+
+
+def parse_oom_kill(message: str) -> tuple[int, str] | None:
+    m = KERNEL_OOM_RE.search(message) or EARLYOOM_RE.search(message)
+    return (int(m.group(1)), m.group(2)) if m else None
+
+
+def parse_config(data) -> dict:
+    """/etc/vpsmon/config.json, keeping only what is valid: anything else means the defaults."""
+    services = data.get("services") if isinstance(data, dict) else None
+    if not isinstance(services, list):
+        services = []
+    return {"services": [s for s in services if isinstance(s, str) and UNIT_RE.fullmatch(s)]}
+
+
+def unit_name(unit: str) -> str:
+    return unit.removesuffix(".service")
+
+
+def services_view(watched: list[str], active: list[str], failed: list[str]) -> list[dict]:
+    """Every watched unit, active when `systemctl is-active` says so, then every failed unit the config does not list."""
+    listed = {unit_name(u) for u in watched}
+    view = [{"name": u, "active": i < len(active) and active[i].strip() == "active"} for i, u in enumerate(watched)]
+    return view + [{"name": unit_name(u), "active": False} for u in failed if unit_name(u) not in listed]
+
+
+def journal_excess(files: list[tuple[str, int, float, bool]], keep: int) -> list[str]:
+    """What `journalctl --vacuum-size` removes: archived files, oldest first, until all files fit in `keep`."""
+    total = sum(size for _, size, _, _ in files)
+    gone = []
+    for path, size, _, _ in sorted((f for f in files if f[3]), key=lambda f: f[2]):
+        if total <= keep:
+            break
+        gone.append(path)
+        total -= size
+    return gone
+
+
+def inside(path: str, root: str) -> list[str] | None:
+    """The components of `path` below `root`, or None when `path` is not a normalized path strictly inside it."""
+    if os.path.normpath(path) != path or not path.startswith(root.rstrip("/") + "/"):
+        return None
+    return path[len(root.rstrip("/")) + 1 :].split("/")
+
+
+def within(path: str, root: str) -> bool:
+    return path == root or path.startswith(root.rstrip("/") + "/")
+
+
+def with_ancestors(paths: Iterable[str]) -> set[str]:
+    found: set[str] = set()
+    for path in paths:
+        while path not in found and path not in ("/", ""):
+            found.add(path)
+            path = os.path.dirname(path)
+    return found
+
+
+def is_system_tmp(name: str) -> bool:
+    return bool(CLAUDE_TMP_RE.fullmatch(name)) or any(fnmatch.fnmatchcase(name, p) for p in SYSTEM_TMP)
+
+
+def version_key(name: str) -> tuple[int, ...]:
+    return tuple(int(n) for n in name.split("."))
+
+
+def parse_docker_size(text: str) -> int:
+    """`238MB`, `1.18GB`, or a `docker system df` reclaimable column such as `5.238GB (71%)`."""
+    m = re.fullmatch(r"([\d.]+)\s*([kKMGTP]?)B(?:\s*\(\d+%\))?", text.strip())
+    if not m:
+        return 0
+    return int(float(m.group(1)) * 1000 ** " kMGTP".index(m.group(2).replace("K", "k") or " "))
+
+
+# Facts: small readers that return plain data. Each takes the /proc root, so tests can hand them a fake one.
+
+
+@dataclass(frozen=True)
+class Proc:
+    pid: int
+    ppid: int
+    comm: str
+    start: int  # clock ticks after boot, /proc/<pid>/stat field 22: with the pid, it names one process for good
+    uid: int
+    mem: int | None  # RssAnon + VmSwap: what ending it gives back; None without a memory map (kernel threads, zombies)
+
+
+def read_proc(proc: str, pid: int) -> Proc | None:
+    try:
+        with open(f"{proc}/{pid}/stat", "rb") as f:
+            raw = f.read().decode(errors="replace")
+        with open(f"{proc}/{pid}/status", "rb") as f:
+            status = dict(line.split(b":", 1) for line in f.read().splitlines() if b":" in line)
+    except OSError:
+        return None
+    left, right = raw.index("("), raw.rindex(")")
+    rest = raw[right + 2 :].split()
+    uid = int(status.get(b"Uid", b"0 0").split()[1])
+    mem = None
+    if b"RssAnon" in status:
+        mem = sum(int(status.get(k, b"0 kB").split()[0]) for k in (b"RssAnon", b"VmSwap")) * 1024
+    return Proc(pid, int(rest[1]), raw[left + 1 : right], int(rest[19]), uid, mem)
+
+
+def read_procs(proc: str) -> dict[int, Proc]:
+    procs = {}
+    for name in listdir(proc):
+        if name.isdigit() and (p := read_proc(proc, int(name))):
+            procs[p.pid] = p
+    return procs
+
+
+def children_of(procs: dict[int, Proc]) -> dict[int, list[int]]:
+    children: dict[int, list[int]] = {}
+    for p in procs.values():
+        children.setdefault(p.ppid, []).append(p.pid)
+    return children
+
+
+def read_nul_list(path: str) -> list[str]:
+    try:
+        with open(path, "rb") as f:
+            return [a.decode(errors="replace") for a in f.read().split(b"\0") if a]
+    except OSError:
+        return []
+
+
+def read_environ(proc: str, pid: int) -> dict[str, str]:
+    return dict(kv.split("=", 1) for kv in read_nul_list(f"{proc}/{pid}/environ") if "=" in kv)
+
+
+@functools.cache
+def user_name(uid: int) -> str:
+    try:
+        return pwd.getpwuid(uid).pw_name
+    except KeyError:
+        return str(uid)
+
+
+@functools.cache
+def user_home(uid: int) -> str | None:
+    try:
+        return pwd.getpwuid(uid).pw_dir
+    except KeyError:
+        return None
+
+
+def read_json(path: str):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def read_meminfo(proc: str) -> dict[str, int]:
+    info = {}
+    with open(f"{proc}/meminfo") as f:
+        for line in f:
+            key, value = line.split(":", 1)
+            info[key] = int(value.split()[0]) * 1024
+    return info
+
+
+def disk_usage(mount: str) -> dict[str, int]:
+    st = os.statvfs(mount)
+    return {
+        "totalBytes": st.f_blocks * st.f_frsize,
+        "usedBytes": (st.f_blocks - st.f_bfree) * st.f_frsize,
+        "freeBytes": st.f_bavail * st.f_frsize,
+    }
+
+
+def run(cmd: list[str], ok_codes: tuple[int, ...] = (0,), timeout: float = 900) -> str:
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise Fail("err.tool-start", tool=cmd[0], detail=str(e)) from e
+    if r.returncode not in ok_codes:
+        raise Fail("err.tool-failed", tool=cmd[0], detail=r.stderr.strip()[:300])
+    return r.stdout
+
+
+def has_systemd() -> bool:
+    return os.path.isdir("/run/systemd/system") and shutil.which("systemctl") is not None
+
+
+def read_services(watched: list[str]) -> list[dict]:
+    if not has_systemd():
+        return []
+    try:
+        active = run(["systemctl", "is-active", "--", *watched], ok_codes=tuple(range(256)), timeout=5) if watched else ""
+        failed = run(["systemctl", "list-units", "--state=failed", "--plain", "--no-legend", "--no-pager"], timeout=5)
+    except Fail as e:
+        log(f"services: {e}")
+        return []
+    return services_view(watched, active.splitlines(), [line.split()[0] for line in failed.splitlines() if line.split()])
+
+
+def oom_kills(since: float) -> list[dict]:
+    """Kills by the kernel OOM killer and by earlyoom, newest first. Kernel lines from every boot, not just this one."""
+    if not shutil.which("journalctl"):
+        return []
+    try:
+        out = run(
+            ["journalctl", "--since", f"@{int(since)}", "-o", "json", "--no-pager", "-q",
+             "--grep", "Killed process|sending SIG", "_TRANSPORT=kernel", "+", "_SYSTEMD_UNIT=earlyoom.service"],
+            ok_codes=(0, 1),
+            timeout=5,
+        )
+    except Fail as e:
+        log(f"oom: {e}")
+        return []
+    kills: dict[int, dict] = {}
+    for line in out.splitlines():
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        message = entry.get("MESSAGE")
+        hit = parse_oom_kill(message) if isinstance(message, str) else None
+        if hit:
+            at = int(entry["__REALTIME_TIMESTAMP"]) / 1e6
+            kills[hit[0]] = {"at": at, "process": hit[1], "pid": hit[0]}
+    return sorted(kills.values(), key=lambda k: -k["at"])
+
+
+@dataclass(frozen=True)
+class Tree:
+    bytes: int  # disk usage, du semantics: hard links once, other filesystems left out
+    newest: float  # the newest mtime or ctime of anything inside: tar and cp -p keep old mtimes, never old ctimes
+    special: bool  # holds a socket or a FIFO, which only a live program makes and uses
+
+
+def tree_stats(root: str) -> Tree | None:
+    """What lies under `root`, symlinks not followed, or None when `root` is gone."""
+    try:
+        st = os.lstat(root)
+    except OSError:
+        return None
+    total, newest = st.st_blocks * 512, max(st.st_mtime, st.st_ctime)
+    special = stat.S_ISSOCK(st.st_mode) or stat.S_ISFIFO(st.st_mode)
+    if not stat.S_ISDIR(st.st_mode):
+        return Tree(total, newest, special)
+    seen: set[tuple[int, int]] = set()
+    stack = [root]
+    while stack:
+        try:
+            entries = os.scandir(stack.pop())
+        except OSError:
+            continue
+        with entries:
+            for e in entries:
+                try:
+                    s = e.stat(follow_symlinks=False)
+                except OSError:
+                    continue
+                newest = max(newest, s.st_mtime, s.st_ctime)
+                special = special or stat.S_ISSOCK(s.st_mode) or stat.S_ISFIFO(s.st_mode)
+                if s.st_dev != st.st_dev:
+                    continue
+                if stat.S_ISDIR(s.st_mode):
+                    stack.append(e.path)
+                elif s.st_nlink > 1:
+                    if (s.st_dev, s.st_ino) in seen:
+                        continue
+                    seen.add((s.st_dev, s.st_ino))
+                total += s.st_blocks * 512
+    return Tree(total, newest, special)
+
+
+def listdir(path: str) -> list[str]:
+    try:
+        return sorted(os.listdir(path))
+    except OSError:
+        return []
+
+
+def is_real_dir(path: str) -> bool:
+    try:
+        return stat.S_ISDIR(os.lstat(path).st_mode)
+    except OSError:
+        return False
+
+
+def owned_dir(path: str, uid: int) -> bool:
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return False
+    return stat.S_ISDIR(st.st_mode) and st.st_uid == uid
+
+
+def canonical(path: str) -> str:
+    """`path` with every folder above it resolved, the last component left as is (a symlink stays the link)."""
+    folder, name = os.path.split(path)
+    return os.path.join(os.path.realpath(folder), name)
+
+
+def read_used_paths(proc: str) -> set[str]:
+    """Every path a process has as its cwd, root or exe, holds open, or maps."""
+    found = set()
+    for pid in listdir(proc):
+        if not pid.isdigit():
+            continue
+        base = f"{proc}/{pid}"
+        for link in ["cwd", "root", "exe", *(f"fd/{fd}" for fd in listdir(f"{base}/fd"))]:
+            try:
+                target = os.readlink(f"{base}/{link}")
+            except OSError:
+                continue
+            if target.startswith("/"):
+                found.add(target.removesuffix(" (deleted)"))
+        try:
+            with open(f"{base}/maps", "rb") as f:
+                for line in f:
+                    fields = line.rstrip(b"\n").split(None, 5)
+                    if len(fields) == 6 and fields[5].startswith(b"/"):
+                        found.add(fields[5].decode(errors="replace").removesuffix(" (deleted)"))
+        except OSError:
+            pass
+    return found
+
+
+def read_mounts(proc: str) -> set[str]:
+    points = set()
+    try:
+        with open(f"{proc}/self/mounts") as f:
+            for line in f:
+                fields = line.split()
+                if len(fields) > 1:
+                    points.add(re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), fields[1]))
+    except OSError:
+        pass
+    return points
+
+
+def acting_uid(path: str) -> int:
+    """Whom to delete `path` as: the first user but root who owns a folder above it, because that user can swap what
+    lies below for a symlink anywhere; root when root owns every folder above it."""
+    folder = "/"
+    for part in os.path.dirname(path).strip("/").split("/"):
+        folder = os.path.join(folder, part)
+        uid = os.lstat(folder).st_uid
+        if uid != 0:
+            return uid
+    return 0
+
+
+def as_user(uid: int, fn: Callable[..., object], *args) -> None:
+    """Runs `fn(*args)` with the rights of `uid`, in a child process when that is not who vpsmon runs as."""
+    if uid == os.geteuid():
+        fn(*args)
+        return
+    pid = os.fork()
+    if pid == 0:
+        code = 1
+        try:
+            try:
+                gid = pwd.getpwuid(uid).pw_gid
+            except KeyError:
+                gid = uid
+            os.setgroups([])
+            os.setgid(gid)
+            os.setuid(uid)
+            fn(*args)
+            code = 0
+        except BaseException as e:
+            print(f"vpsmon: {e}", file=sys.stderr, flush=True)
+        finally:
+            os._exit(code)
+    _, status = os.waitpid(pid, 0)
+    if os.waitstatus_to_exitcode(status) != 0:
+        raise OSError(f"failed as uid {uid}")
+
+
+def docker_unused_images() -> dict[str, Item]:
+    containers = run(["docker", "ps", "-aq", "--no-trunc"]).split()
+    used = set(run(["docker", "inspect", "--format", "{{.Image}}", *containers]).split()) if containers else set()
+    unused = {}
+    for line in run(["docker", "image", "ls", "--no-trunc", "--format", "{{json .}}"]).splitlines():
+        image = json.loads(line)
+        image_id = image["ID"]
+        if image_id in used:
+            continue
+        name = f'{image["Repository"]}:{image["Tag"]}'
+        unused[image_id] = Item(image_id, parse_docker_size(image["Size"]), f"{name} ({image_id.removeprefix('sha256:')[:12]})")
+    return unused
+
+
+def docker_dangling_anonymous_volumes() -> dict[str, str]:
+    names = [n for n in run(["docker", "volume", "ls", "-q", "-f", "dangling=true"]).split() if HEX64_RE.fullmatch(n)]
+    if not names:
+        return {}
+    volumes = json.loads(run(["docker", "volume", "inspect", *names]))
+    return {v["Name"]: v["Mountpoint"] for v in volumes if "com.docker.volume.anonymous" in (v.get("Labels") or {})}
+
+
+def docker_build_cache() -> int:
+    """The build cache `docker system df` reports as reclaimable."""
+    for line in run(["docker", "system", "df", "--format", "{{json .}}"]).splitlines():
+        row = json.loads(line)
+        if row.get("Type") == "Build Cache":
+            return parse_docker_size(str(row.get("Reclaimable", "")))
+    return 0
+
+
+# Workers.
+
+
+@dataclass(frozen=True)
+class Session:
+    proc: Proc
+    cfg: str
+    data: dict
+
+    @property
+    def state(self) -> str:
+        status = self.data.get("status")
+        return status if status in ("busy", "idle") else "unknown"
+
+    @property
+    def session_id(self) -> str:
+        return str(self.data.get("sessionId") or "")
+
+
+def config_dir(proc: str, p: Proc) -> str | None:
+    """CLAUDE_CONFIG_DIR from the process environment, else the owner's ~/.claude."""
+    configured = read_environ(proc, p.pid).get("CLAUDE_CONFIG_DIR")
+    home = user_home(p.uid)
+    return configured or (os.path.join(home, ".claude") if home else None)
+
+
+def find_sessions(procs: dict[int, Proc], paths: Paths) -> list[Session]:
+    sessions = []
+    for p in procs.values():
+        if p.comm != "claude" or not (cfg := config_dir(paths.proc, p)):
+            continue
+        data = read_json(os.path.join(cfg, "sessions", f"{p.pid}.json"))
+        if isinstance(data, dict) and str(data.get("procStart")) == str(p.start):
+            sessions.append(Session(p, cfg, data))
+    return sessions
+
+
+def seconds(ms) -> float:
+    return ms / 1000 if isinstance(ms, (int, float)) else 0.0
+
+
+def worker_view(s: Session, procs: dict[int, Proc], children: dict[int, list[int]], now: float, proc: str) -> dict:
+    d, pid = s.data, s.proc.pid
+    cwd = str(d.get("cwd") or "")
+    state_since = seconds(d.get("statusUpdatedAt") or d.get("updatedAt") or d.get("startedAt"))
+    tree = [pid, *descendants(children, pid)]
+    return {
+        "id": f"worker:{pid}:{s.proc.start}",
+        "pid": pid,
+        "user": user_name(s.proc.uid),
+        "name": str(d.get("name") or os.path.basename(cwd)),
+        "workspace": cwd,
+        "state": s.state,
+        "stateSince": state_since,
+        "lastActivity": state_since,
+        "startedAt": seconds(d.get("startedAt")) or state_since,
+        "memBytes": sum(procs[q].mem or 0 for q in tree),
+        "processes": len(tree),
+        "sessionId": s.session_id,
+        "version": str(d.get("version") or ""),
+        "resumeCommand": resume_command(read_nul_list(f"{proc}/{pid}/cmdline"), s.session_id),
+        "closable": is_closable(s.state, state_since, now),
+    }
+
+
+# RAM by program.
+
+# Programs that keep the server up or are the way in: never ended from the app.
+SYSTEM_COMMS = frozenset({
+    "systemd", "(sd-pam)", "init", "sshd", "sshd-session", "sshd-auth", "sudo", "login", "agetty", "dbus-daemon",
+    "dbus-broker", "polkitd", "cron", "crond", "atd", "rsyslogd", "journald", "udevd", "containerd", "dockerd",
+    "docker-proxy", "earlyoom", "snapd", "multipathd", "chronyd", "ntpd", "unattended-upgr",
+    "networkd-dispat", "packagekitd", "ModemManager", "irqbalance", "qemu-ga", "cloud-init", "fail2ban-server",
+})
+SYSTEM_PREFIXES = ("systemd-", "containerd-shim")
+SBIN = ("/usr/sbin/", "/sbin/", "/usr/local/sbin/")
+MEM_GROUPS = 8
+MEM_PROCESSES = 6
+COMMAND_MAX = 160
+
+
+def is_system(comm: str) -> bool:
+    return comm in SYSTEM_COMMS or comm.startswith(SYSTEM_PREFIXES)
+
+
+def killable(pid: int, procs: dict[int, Proc], children: dict[int, list[int]], protected: set[int],
+             exe: Callable[[int], str | None]) -> bool:
+    """Whether the app may end `pid` and its descendants: not PID 1 or a kernel thread, and nothing in its tree is a
+    system program (by name, or run from an sbin folder: VPN and other daemons), a Claude Code worker or vpsmon itself
+    (which also covers vpsmon's ancestors: the SSH session)."""
+    p = procs.get(pid)
+    if p is None or pid in (1, 2) or p.ppid == 2 or p.mem is None or exe(pid) is None:
+        return False
+    tree = [pid, *descendants(children, pid)]
+    return not any(q in protected or is_system(procs[q].comm) or (exe(q) or "").startswith(SBIN) for q in tree)
+
+
+def exe_of(proc: str, pid: int) -> str | None:
+    try:
+        return os.readlink(f"{proc}/{pid}/exe")
+    except OSError:
+        return None
+
+
+def boot_time(proc: str) -> float:
+    try:
+        with open(f"{proc}/stat") as f:
+            return float(next(line.split()[1] for line in f if line.startswith("btime ")))
+    except (OSError, StopIteration, ValueError):
+        return 0.0
+
+
+def command_line(proc: str, p: Proc) -> str:
+    command = " ".join(read_nul_list(f"{proc}/{p.pid}/cmdline")) or p.comm
+    return command if len(command) <= COMMAND_MAX else command[: COMMAND_MAX - 1] + "…"
+
+
+def memory_groups(procs: dict[int, Proc], children: dict[int, list[int]], protected: set[int], proc: str) -> dict:
+    """processBytes and the biggest MemGroups: every process with a memory map, grouped by comm."""
+    groups: dict[str, list[Proc]] = {}
+    for p in procs.values():
+        if p.mem is not None:
+            groups.setdefault(p.comm, []).append(p)
+    ranked = sorted(groups.items(), key=lambda g: (-sum(p.mem for p in g[1]), g[0]))
+    booted, ticks = boot_time(proc), os.sysconf("SC_CLK_TCK")
+
+    def view(p: Proc) -> dict:
+        tree = [p.pid, *descendants(children, p.pid)]
+        return {
+            "id": f"proc:{p.pid}:{p.start}",
+            "pid": p.pid,
+            "user": user_name(p.uid),
+            "command": command_line(proc, p),
+            "bytes": p.mem,
+            "treeBytes": sum(procs[q].mem or 0 for q in tree),
+            "children": len(tree) - 1,
+            "startedAt": round(booted + p.start / ticks, 1),
+            "killable": killable(p.pid, procs, children, protected, lambda q: exe_of(proc, q)),
+        }
+
+    return {
+        "processBytes": sum(p.mem for members in groups.values() for p in members),
+        "groups": [
+            {
+                "name": comm,
+                "bytes": sum(p.mem for p in members),
+                "count": len(members),
+                "processes": [view(p) for p in sorted(members, key=lambda p: (-p.mem, p.pid))[:MEM_PROCESSES]],
+            }
+            for comm, members in ranked[:MEM_GROUPS]
+            if sum(p.mem for p in members) > 0
+        ],
+    }
+
+
+# Disk actions.
+
+
+@dataclass(frozen=True)
+class Item:
+    ref: str
+    bytes: int
+    label: str = ""
+
+    def public(self) -> dict:
+        return {"label": self.label or self.ref, "bytes": self.bytes}
+
+    def stored(self) -> dict:
+        return {**self.public(), "ref": self.ref}
+
+
+class Live:
+    """Live facts the disk-action checks consult, each read once and only when asked for.
+    Tests pass any fact as a keyword instead of reading it from the machine."""
+
+    used_paths: set[str] | None = None
+    mounts: set[str] | None = None
+
+    def __init__(self, paths: Paths, now: float, **facts):
+        self.paths, self.now = paths, now
+        self.scanned_bytes: dict[str, int] = {}
+        self._pinned: set[str] | None = None
+        self._pinned_at = 0.0
+        self.__dict__.update(facts)
+
+    @cached_property
+    def session_ids(self) -> set[str]:
+        return {s.session_id for s in find_sessions(read_procs(self.paths.proc), self.paths)}
+
+    @cached_property
+    def homes(self) -> list[str]:
+        return self.paths.homes()
+
+    @cached_property
+    def tools(self) -> set[str]:
+        return {t for t in ("journalctl", "apt-get", "docker") if shutil.which(t)}
+
+    def busy(self, path: str) -> bool:
+        """Whether a process uses `path` or something inside it, or a filesystem is mounted there or inside it.
+        A long scan reads /proc again every PINNED_TTL seconds."""
+        live = self.used_paths is None or self.mounts is None
+        if self._pinned is None or (live and time.monotonic() - self._pinned_at > PINNED_TTL):
+            used = self.used_paths if self.used_paths is not None else read_used_paths(self.paths.proc)
+            mounts = self.mounts if self.mounts is not None else read_mounts(self.paths.proc)
+            self._pinned, self._pinned_at = with_ancestors([*used, *mounts]), time.monotonic()
+        return canonical(path) in self._pinned
+
+    @cached_property
+    def unused_images(self) -> dict[str, Item]:
+        return docker_unused_images()
+
+    @cached_property
+    def dangling_volumes(self) -> dict[str, str]:
+        return docker_dangling_anonymous_volumes()
+
+    @cached_property
+    def build_cache(self) -> int:
+        return docker_build_cache()
+
+
+@dataclass(frozen=True)
+class DiskAction:
+    """`check` is the only gate: the scan runs it on every candidate, and `act` runs it again on every item right
+    before it frees it. `remove` frees one item; `command` frees them all at once. A `replan` action has too many
+    items to keep: the scan stores the biggest few, and `act` selects again from the candidates. `tool` is the program
+    the action needs; without it the action is never published."""
+
+    id: str
+    risk: str
+    noun: str | None  # what the detail counts, a `noun.*` message
+    candidates: Callable[[Live], Iterable[str]]
+    check: Callable[[Live, str], Item | None]
+    remove: Callable[[Live, str], object] | None = None
+    command: tuple[str, ...] = ()
+    replan: bool = False
+    tool: str | None = None
+
+    def plan(self, live: Live, within: Iterable[str] | None = None) -> list[Item]:
+        refs = self.candidates(live) if within is None else within
+        items = (self.check(live, ref) for ref in refs)
+        return sorted((i for i in items if i), key=lambda i: -i.bytes)
+
+    def apply(self, live: Live, refs: Iterable[str]) -> tuple[list[Item], int]:
+        """Frees what still qualifies among `refs`: the items freed, biggest first, and how many failed."""
+        if self.command:
+            items = self.plan(live, refs)
+            if items:
+                run(list(self.command))
+            return items, 0
+        done, failed = [], 0
+        for ref in refs:
+            item = self.check(live, ref)
+            if item is None:
+                continue
+            try:
+                self.remove(live, item.ref)
+                done.append(item)
+            except (OSError, Fail) as e:
+                failed += 1
+                log(f"{item.ref}: {e}")
+        return sorted(done, key=lambda i: -i.bytes), failed
+
+    def summary(self, items: list[Item]) -> dict:
+        return {
+            "id": self.id,
+            "bytes": sum(i.bytes for i in items),
+            "risk": self.risk,
+            "count": len(items),
+            "items": [i.stored() for i in (items[:MAX_ITEMS] if self.replan else items)],
+        }
+
+
+def remove_tree(path: str) -> None:
+    if is_real_dir(path):
+        shutil.rmtree(path)
+    else:
+        os.unlink(path)
+
+
+def remove_as_owner(live: Live, path: str) -> None:
+    as_user(acting_uid(path), remove_tree, path)
+
+
+def truncate_and_unlink(path: str) -> None:
+    fd = os.open(path, os.O_WRONLY | os.O_NOFOLLOW)
+    try:
+        os.ftruncate(fd, 0)
+    finally:
+        os.close(fd)
+    os.unlink(path)
+
+
+def quiet_for(live: Live, path: str, quiet: float) -> Item | None:
+    """`path` as an item when nothing uses it, it holds no socket or FIFO, and nothing in it changed for `quiet` s."""
+    if live.busy(path):
+        return None
+    tree = tree_stats(path)
+    if tree is None or tree.special or live.now - tree.newest < quiet:
+        return None
+    return Item(path, tree.bytes)
+
+
+def stale_candidates(live: Live) -> Iterable[str]:
+    for root in (live.paths.tmp, live.paths.var_tmp):
+        yield from (os.path.join(root, name) for name in listdir(root))
+
+
+def stale_check(live: Live, path: str) -> Item | None:
+    folder, name = os.path.split(path)
+    quiet = {live.paths.tmp: DAY, live.paths.var_tmp: WEEK}.get(folder)
+    if quiet is None or os.path.normpath(path) != path or is_system_tmp(name) or os.path.realpath(folder) != folder:
+        return None
+    return quiet_for(live, path, quiet)
+
+
+def claude_tmp_candidates(live: Live) -> Iterable[str]:
+    for base in (n for n in listdir(live.paths.tmp) if CLAUDE_TMP_RE.fullmatch(n)):
+        for slug in (s for s in listdir(os.path.join(live.paths.tmp, base)) if s.startswith("-")):
+            yield from (os.path.join(live.paths.tmp, base, slug, sid) for sid in listdir(os.path.join(live.paths.tmp, base, slug)))
+
+
+def claude_tmp_check(live: Live, path: str) -> Item | None:
+    """A per-session folder /tmp/claude-<uid>/<slug>/<uuid>, owned by <uid>, of a session that is not alive."""
+    parts = inside(path, live.paths.tmp)
+    m = CLAUDE_TMP_RE.fullmatch(parts[0]) if parts and len(parts) == 3 else None
+    if m is None or not parts[1].startswith("-") or not UUID_RE.fullmatch(parts[2]) or parts[2] in live.session_ids:
+        return None
+    uid, base = int(m.group(1)), os.path.join(live.paths.tmp, parts[0])
+    if not (owned_dir(base, uid) and is_real_dir(os.path.join(base, parts[1])) and owned_dir(path, uid)):
+        return None
+    if os.path.realpath(live.paths.tmp) != live.paths.tmp:
+        return None
+    return quiet_for(live, path, CLAUDE_TMP_QUIET)
+
+
+def walk_files(root: str) -> Iterable[str]:
+    """Every file under `root` on its filesystem, skipping node_modules and .git."""
+    try:
+        dev = os.lstat(root).st_dev
+    except OSError:
+        return
+    for folder, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in PRUNE_DIRS and same_device(os.path.join(folder, d), dev)]
+        yield from (os.path.join(folder, f) for f in files)
+
+
+def same_device(path: str, dev: int) -> bool:
+    try:
+        return os.lstat(path).st_dev == dev
+    except OSError:
+        return False
+
+
+def log_candidates(live: Live) -> Iterable[str]:
+    for root in live.paths.log_roots:
+        yield from (p for p in walk_files(root) if p.endswith(".log"))
+
+
+def log_check(live: Live, path: str) -> Item | None:
+    root = next((r for r in live.paths.log_roots if inside(path, r)), None)
+    if root is None or not path.endswith(".log") or os.path.realpath(os.path.dirname(path)) != os.path.dirname(path):
+        return None
+    parts = inside(path, root)
+    if PRUNE_DIRS.intersection(parts[:-1]) or live.busy(path):
+        return None
+    # A log inside what tmp-stale or claude-tmp frees goes with it, and counts there.
+    if root in (live.paths.tmp, live.paths.var_tmp) and stale_check(live, os.path.join(root, parts[0])):
+        return None
+    if root == live.paths.tmp and len(parts) > 3 and claude_tmp_check(live, os.path.join(root, *parts[:3])):
+        return None
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return None
+    return Item(path, st.st_blocks * 512) if stat.S_ISREG(st.st_mode) and st.st_size > BIG_LOG else None
+
+
+def truncate_log(live: Live, path: str) -> None:
+    as_user(acting_uid(path), truncate_and_unlink, path)
+
+
+def version_candidates(live: Live) -> Iterable[str]:
+    for home in live.homes:
+        folder = os.path.join(home, VERSIONS_DIR)
+        yield from (os.path.join(folder, n) for n in listdir(folder) if VERSION_RE.fullmatch(n))
+
+
+def version_check(live: Live, path: str) -> Item | None:
+    """A Claude Code version older than the one ~/.local/bin/claude points to, that no process runs."""
+    folder, name = os.path.split(path)
+    home = next((h for h in live.homes if folder == os.path.join(h, VERSIONS_DIR)), None)
+    if home is None or not VERSION_RE.fullmatch(name) or os.path.realpath(folder) != folder:
+        return None
+    current = os.path.basename(os.path.realpath(os.path.join(home, CLAUDE_LINK)))
+    if not VERSION_RE.fullmatch(current) or version_key(name) >= version_key(current):
+        return None
+    if os.path.islink(path) or not os.path.lexists(path) or live.busy(path):
+        return None
+    tree = tree_stats(path)
+    return Item(path, tree.bytes) if tree else None
+
+
+def journal_files(root: str) -> list[tuple[str, int, float, bool]]:
+    files = []
+    for folder, _, names in os.walk(root):
+        for name in names:
+            if name.endswith((".journal", ".journal~")):
+                st = os.lstat(os.path.join(folder, name))
+                files.append((os.path.join(folder, name), st.st_blocks * 512, st.st_mtime, "@" in name))
+    return files
+
+
+def journal_check(live: Live, path: str) -> Item | None:
+    if path != live.paths.journal:
+        return None
+    files = journal_files(path)
+    sizes = {p: size for p, size, _, _ in files}
+    excess = sum(sizes[p] for p in journal_excess(files, JOURNAL_KEEP))
+    return Item(path, excess) if excess else None
+
+
+def deb_check(live: Live, path: str) -> Item | None:
+    if os.path.dirname(path) != live.paths.apt_archives or not path.endswith(".deb"):
+        return None
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return None
+    return Item(path, st.st_blocks * 512) if stat.S_ISREG(st.st_mode) else None
+
+
+def pkg_cache_candidates(live: Live) -> list[str]:
+    return [os.path.join(h, rel) for h in live.homes for rel in PKG_CACHES]
+
+
+def pkg_cache_check(live: Live, path: str) -> Item | None:
+    if path not in pkg_cache_candidates(live) or not is_real_dir(path) or os.path.realpath(path) != path:
+        return None
+    if live.busy(path):
+        return None
+    tree = tree_stats(path)
+    return Item(path, tree.bytes) if tree else None
+
+
+def volume_check(live: Live, name: str) -> Item | None:
+    mountpoint = live.dangling_volumes.get(name) if HEX64_RE.fullmatch(name) else None
+    if mountpoint is None:
+        return None
+    return Item(name, live.scanned_bytes.get(name) or (tree_stats(mountpoint) or Tree(0, 0, False)).bytes)
+
+
+BUILD_CACHE = "build-cache"
+
+
+def build_cache_check(live: Live, ref: str) -> Item | None:
+    return Item(BUILD_CACHE, live.build_cache, "Build Cache") if ref == BUILD_CACHE and live.build_cache > 0 else None
+
+
+REGISTRY = (
+    DiskAction(
+        "tmp-stale",
+"safe",
+        "entry",
+        stale_candidates,
+        stale_check,
+        lambda live, ref: remove_tree(ref),
+        replan=True,
+    ),
+    DiskAction(
+        "claude-tmp",
+"safe",
+        "folder",
+        claude_tmp_candidates,
+        claude_tmp_check,
+        remove_as_owner,
+    ),
+    DiskAction(
+        "big-logs",
+"review",
+        "log",
+        log_candidates,
+        log_check,
+        truncate_log,
+    ),
+    DiskAction(
+        "claude-versions",
+"safe",
+        "version",
+        version_candidates,
+        version_check,
+        remove_as_owner,
+    ),
+    DiskAction(
+        "pkg-caches",
+"safe",
+        None,
+        lambda live: [p for p in pkg_cache_candidates(live) if os.path.lexists(p)],
+        pkg_cache_check,
+        remove_as_owner,
+    ),
+    DiskAction(
+        "journal",
+"safe",
+        None,
+        lambda live: [live.paths.journal] if is_real_dir(live.paths.journal) else [],
+        journal_check,
+        command=("journalctl", "--vacuum-size=200M"),
+        tool="journalctl",
+    ),
+    DiskAction(
+        "apt-cache",
+"safe",
+        "deb",
+        lambda live: [os.path.join(live.paths.apt_archives, n) for n in listdir(live.paths.apt_archives) if n.endswith(".deb")],
+        deb_check,
+        command=("apt-get", "clean"),
+        tool="apt-get",
+    ),
+    DiskAction(
+        "docker-images",
+"review",
+        "image",
+        lambda live: list(live.unused_images),
+        lambda live, ref: live.unused_images.get(ref),
+        lambda live, ref: run(["docker", "image", "rm", ref]),
+        tool="docker",
+    ),
+    DiskAction(
+        "docker-volumes",
+"review",
+        "volume",
+        lambda live: list(live.dangling_volumes),
+        volume_check,
+        lambda live, ref: run(["docker", "volume", "rm", ref]),
+        tool="docker",
+    ),
+    DiskAction(
+        "docker-build-cache",
+"review",
+        None,
+        lambda live: [BUILD_CACHE],
+        build_cache_check,
+        command=("docker", "builder", "prune", "-af"),
+        tool="docker",
+    ),
+)
+ACTIONS = {a.id: a for a in REGISTRY}
+
+
+def published(live: Live) -> list[DiskAction]:
+    """The actions this host can run: those whose tool is installed."""
+    return [a for a in REGISTRY if a.tool is None or a.tool in live.tools]
+
+
+def action_view(stored: dict, tr: Text) -> dict | None:
+    """A saved action as status shows it, in --lang; None for an action this version does not have."""
+    action = ACTIONS.get(stored.get("id"))
+    if action is None:
+        return None
+    count = tr.count(stored.get("count", len(stored["items"])), action.noun) if action.noun else ""
+    return {
+        "id": action.id,
+        "title": tr(f"action.{action.id}.title"),
+        "detail": tr(f"action.{action.id}.detail", count=count),
+        "bytes": stored["bytes"],
+        "risk": action.risk,
+        "count": stored.get("count", len(stored["items"])),
+        "items": [{"label": i["label"], "bytes": i["bytes"]} for i in stored["items"][:MAX_ITEMS]],
+    }
+
+
+# Disk map: the used space in blocks that add up to all of it.
+
+
+@dataclass(frozen=True)
+class MapGroup:
+    """One block of the disk map. `roots` are absolute paths, globs allowed within a component; a root that is a file
+    (a swapfile) is sized from its blocks, since du lists only directories. A root inside another group's root is that
+    group's: the most specific root wins. Children are the directories `levels` below the roots (0: the roots
+    themselves), skipping other groups' roots. The group with no roots is the rest of the disk. `freeable` names the
+    disk actions that free space here; an action listed by several groups counts each item in the group whose roots
+    hold its path."""
+
+    id: str
+    roots: tuple[str, ...] = ()
+    levels: int = 1
+    freeable: tuple[str, ...] = ()
+
+
+MAP_GROUPS = (
+    MapGroup("home", ("/home/*", "/root"), freeable=("big-logs", "claude-versions")),
+    MapGroup("claude", ("/home/*/.claude", "/root/.claude")),
+    MapGroup(
+        "caches", ("/var/cache", "/home/*/.cache", "/home/*/.npm", "/root/.cache", "/root/.npm"),
+        freeable=("pkg-caches", "apt-cache"),
+    ),
+    MapGroup(
+        "docker", ("/var/lib/docker", "/var/lib/containerd"),
+        freeable=("docker-images", "docker-volumes", "docker-build-cache"),
+    ),
+    MapGroup("logs", ("/var/log",), freeable=("journal", "big-logs")),
+    MapGroup("temp", ("/tmp", "/var/tmp"), freeable=("tmp-stale", "claude-tmp", "big-logs")),
+    MapGroup("swap", ("/swapfile*", "/swap.img"), levels=0),
+    MapGroup("system", ("/usr", "/opt", "/boot", "/snap", "/var/lib/snapd"), levels=0),
+    MapGroup("rest"),
+)
+REST = next(g for g in MAP_GROUPS if not g.roots)
+# The rest's children: the directories this deep that no group holds, and what shallower ones hold loose.
+REST_DEPTH = 3
+
+
+def depth(path: str) -> int:
+    return path.rstrip("/").count("/")
+
+
+def held_by(path: str, pattern: str) -> bool:
+    """Whether `path` is a root matching `pattern`, or lies below one."""
+    parts = path.rstrip("/").split("/")
+    n = depth(pattern) + 1
+    return path.startswith("/") and len(parts) >= n and fnmatch.fnmatchcase("/".join(parts[:n]), pattern)
+
+
+# One du pass prints every directory the map needs, and no deeper.
+DU_DEPTH = max([depth(r) + g.levels for g in MAP_GROUPS for r in g.roots] + [REST_DEPTH])
+
+
+def matching(pattern: str, sizes: dict[str, int]) -> list[str]:
+    if not any(c in pattern for c in "*?["):
+        return [pattern] if pattern in sizes else []
+    return sorted(p for p in sizes if depth(p) == depth(pattern) and held_by(p, pattern))
+
+
+def parse_du(text: str) -> dict[str, int]:
+    sizes = {}
+    for line in text.splitlines():
+        size, tab, path = line.partition("\t")
+        if tab and size.isdigit():
+            sizes[path] = int(size)
+    return sizes
+
+
+def outermost(paths: Iterable[str]) -> list[str]:
+    """The paths that lie inside none of the others."""
+    paths = list(paths)
+    return [p for p in paths if not any(o != p and within(p, o) for o in paths)]
+
+
+def map_group(spec: MapGroup, size: int, children: dict[str, int]) -> dict:
+    biggest = sorted(((p, b) for p, b in children.items() if b > 0), key=lambda c: (-c[1], c[0]))[:MAP_CHILDREN]
+    return {
+        "id": spec.id,
+        "bytes": size,
+        "children": [{"path": p, "bytes": b} for p, b in biggest],
+    }
+
+
+def build_map(du: dict[str, int], used: int, files: dict[str, int]) -> dict:
+    """The map from one `du -B1` pass (directory -> bytes), the root files du does not list, and statvfs used bytes.
+    Each byte counts once, in the group with the most specific root over it; the rest is what no group covers, so the
+    groups always add up to `usedBytes`."""
+    sizes = {**du, **files}
+    subdirs: dict[str, list[str]] = {}
+    for path in du:
+        if path != "/":
+            subdirs.setdefault(os.path.dirname(path), []).append(path)
+    owner: dict[str, MapGroup] = {}
+    for spec in MAP_GROUPS:
+        for pattern in spec.roots:
+            for path in matching(pattern, sizes):
+                owner.setdefault(path, spec)
+
+    def own(path: str) -> int:
+        """`path` minus the roots inside it, which count in their own groups."""
+        inner = outermost(r for r in owner if r != path and within(r, path))
+        return sizes[path] - sum(sizes[r] for r in inner)
+
+    groups = []
+    for spec in MAP_GROUPS:
+        if spec is REST:
+            continue
+        roots = [r for r, g in owner.items() if g is spec]
+        listed = roots
+        for _ in range(spec.levels):
+            listed = [c for p in listed for c in subdirs.get(p, ()) if c not in owner]
+        groups.append(map_group(spec, sum(own(r) for r in roots), {p: own(p) for p in listed}))
+    known = sum(g["bytes"] for g in groups)
+    if known > used:
+        log(f"map: the groups add up to {known} bytes, more than the {used} in use; the rest is 0")
+        used = known
+    groups = sorted((g for g in groups if g["bytes"] > 0), key=lambda g: -g["bytes"])
+    if used > known:
+        covered = outermost(owner)
+        outside = {
+            p: size - sum(sizes[r] for r in covered if within(r, p))
+            for p, size in du.items()
+            if depth(p) <= REST_DEPTH and not any(within(p, r) for r in covered)
+        }
+        loose = {
+            p: b - sum(outside.get(c, 0) for c in subdirs.get(p, ())) if depth(p) < REST_DEPTH else b
+            for p, b in outside.items()
+        }
+        groups.append(map_group(REST, used - known, loose))
+    return {"usedBytes": used, "groups": groups}
+
+
+def freeable_by_group(actions: list[dict]) -> dict[str, dict[str, int]]:
+    """What each published disk action would free, by the map group it frees it from."""
+    shares: dict[str, dict[str, int]] = {}
+
+    def add(group: MapGroup, action_id: str, size: int) -> None:
+        share = shares.setdefault(group.id, {})
+        share[action_id] = share.get(action_id, 0) + size
+
+    for action in actions:
+        owners = [g for g in MAP_GROUPS if action.get("id") in g.freeable]
+        if len(owners) == 1:
+            add(owners[0], action["id"], action["bytes"])
+            continue
+        for item in action.get("items", []) if owners else []:
+            ref = item.get("ref") or item.get("label") or ""
+            holders = [(depth(r), g) for g in owners for r in g.roots if held_by(ref, r)]
+            add(max(holders, key=lambda h: h[0])[1] if holders else owners[0], action["id"], item["bytes"])
+    return shares
+
+
+def map_view(stored: dict | None, actions: list[dict], tr: Text) -> dict:
+    stored = stored or {"usedBytes": 0, "groups": []}
+    shares = freeable_by_group(actions)
+    groups = []
+    for g in stored["groups"]:
+        share = shares.get(g["id"], {})
+        ranked = sorted((a for a, b in share.items() if b > 0), key=lambda a: (-share[a], a))
+        groups.append({
+            "id": g["id"],
+            "title": tr(f"map.{g['id']}.title"),
+            "hint": tr(f"map.{g['id']}.hint"),
+            "bytes": g["bytes"],
+            "freeableBytes": min(g["bytes"], sum(share.values())),
+            "actions": ranked,
+            "children": g["children"],
+        })
+    return {"usedBytes": stored["usedBytes"], "groups": groups}
+
+
+def root_files(patterns: Iterable[str]) -> dict[str, int]:
+    sizes = {}
+    for pattern in patterns:
+        for path in glob.glob(pattern):
+            try:
+                st = os.lstat(path)
+            except OSError:
+                continue
+            if stat.S_ISREG(st.st_mode):
+                sizes[path] = st.st_blocks * 512
+    return sizes
+
+
+def measure_map() -> dict:
+    out = run(
+        ["du", "-x", "-B1", f"--max-depth={DU_DEPTH}", f"--threshold={DU_THRESHOLD}", "/"],
+        ok_codes=(0, 1),
+        timeout=3 * HOUR,
+    )
+    return build_map(parse_du(out), disk_usage("/")["usedBytes"], root_files(r for g in MAP_GROUPS for r in g.roots))
+
+
+# State files.
+
+
+def write_json_atomic(path: str, data) -> None:
+    tmp = f"{path}.tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+@contextmanager
+def state_lock(paths: Paths, wait: bool = True):
+    os.makedirs(paths.state, exist_ok=True)
+    fd = os.open(paths.file("lock"), os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise Fail("err.busy") from None
+        yield
+    finally:
+        os.close(fd)
+
+
+def scan_running(paths: Paths) -> bool:
+    try:
+        fd = os.open(paths.file("scan.lock"), os.O_RDONLY)
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        return False
+    except BlockingIOError:
+        return True
+    finally:
+        os.close(fd)
+
+
+def read_scan(paths: Paths) -> dict:
+    """The saved scan, or {} when there is none or an older vpsmon wrote it: the next sample starts a fresh one."""
+    scan = read_json(paths.file("scan.json"))
+    return scan if isinstance(scan, dict) and scan.get("schema") == SCHEMA else {}
+
+
+def last_scan_attempt(paths: Paths) -> float:
+    scan = read_scan(paths)
+    try:
+        started = os.stat(paths.file("scan.lock")).st_mtime
+    except OSError:
+        started = 0.0
+    return max(scan.get("at") or 0.0, started)
+
+
+def read_history(paths: Paths, since: float) -> list[dict]:
+    rows = []
+    try:
+        with open(paths.file("history.jsonl")) as f:
+            for line in f:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(row, dict) and row.get("at", 0) >= since:
+                    rows.append(row)
+    except OSError:
+        pass
+    return sorted(rows, key=lambda r: r["at"])
+
+
+def append_line(path: str, line: str, mode: int) -> None:
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, mode)
+    try:
+        os.write(fd, line.encode())
+    finally:
+        os.close(fd)
+
+
+def audit(paths: Paths, record: dict) -> None:
+    record = {"at": time.time(), "user": os.environ.get("SUDO_USER", ""), **record}
+    append_line(paths.audit_log, json.dumps(record, ensure_ascii=False) + "\n", 0o640)
+
+
+# Commands.
+
+
+def cmd_status(paths: Paths, now: float, tr: Text) -> dict:
+    procs = read_procs(paths.proc)
+    children = children_of(procs)
+    sessions = find_sessions(procs, paths)
+    workers = sort_workers([worker_view(s, procs, children, now, paths.proc) for s in sessions])
+    protected = {s.proc.pid for s in sessions} | {os.getpid()}
+    mem = read_meminfo(paths.proc)
+    disk = disk_usage("/")
+    history = read_history(paths, now - DAY)
+    growth = growth_per_hour(history, now)
+    load = os.getloadavg()
+    with open(f"{paths.proc}/uptime") as f:
+        uptime = int(float(f.read().split()[0]))
+    scan = read_scan(paths)
+    actions = [a for a in scan.get("actions", []) if a.get("id") in ACTIONS]
+    return {
+        "schema": SCHEMA,
+        "ok": True,
+        "version": VERSION,
+        "host": socket.gethostname(),
+        "at": round(now, 1),
+        "uptimeSec": uptime,
+        "cpu": {"cores": os.cpu_count(), "load1": load[0], "load5": load[1], "load15": load[2]},
+        "memory": {
+            "totalBytes": mem["MemTotal"],
+            "availableBytes": mem["MemAvailable"],
+            "swapTotalBytes": mem["SwapTotal"],
+            "swapUsedBytes": mem["SwapTotal"] - mem["SwapFree"],
+            **memory_groups(procs, children, protected, paths.proc),
+        },
+        "disk": {"mount": "/", **disk, "growthBytesPerHour": growth, "fullInHours": full_in_hours(disk["freeBytes"], growth)},
+        "services": read_services(parse_config(read_json(paths.config))["services"]),
+        "oomKills": oom_kills(now - DAY),
+        "workers": workers,
+        "history": history,
+        "scan": {
+            "at": scan.get("at"),
+            "running": scan_running(paths),
+            "actions": [v for a in actions if (v := action_view(a, tr))],
+            "map": map_view(scan.get("map"), actions, tr),
+        },
+    }
+
+
+def start_background_scan(paths: Paths) -> bool:
+    """Starts `scan` so that it outlives ssh and the timer: as the transient unit vpsmon-scan where systemd runs, else
+    as a detached child in its own session (containers). The scan lock keeps a second one from running."""
+    argv = [sys.executable, SELF, "scan"]
+    if has_systemd() and shutil.which("systemd-run"):
+        env = [f"--setenv=VPSMON_PREFIX={os.environ['VPSMON_PREFIX']}"] if os.environ.get("VPSMON_PREFIX") else []
+        r = subprocess.run(["systemd-run", "--unit=vpsmon-scan", "--collect", "--quiet", *env, *argv],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            return True
+        log(f"systemd-run: {r.stderr.strip()}")
+    os.makedirs(paths.state, exist_ok=True)
+    try:
+        with open(paths.file("scan.log"), "w") as out:
+            subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=out, start_new_session=True)
+    except OSError as e:
+        log(f"scan: {e}")
+        return False
+    return True
+
+
+def cmd_sample(paths: Paths, now: float) -> dict:
+    sessions = find_sessions(read_procs(paths.proc), paths)
+    mem = read_meminfo(paths.proc)
+    row = {
+        "at": round(now, 1),
+        "diskUsedBytes": disk_usage("/")["usedBytes"],
+        "memAvailableBytes": mem["MemAvailable"],
+        "swapUsedBytes": mem["SwapTotal"] - mem["SwapFree"],
+        "busy": sum(s.state == "busy" for s in sessions),
+        "idle": sum(s.state == "idle" for s in sessions),
+    }
+    os.makedirs(paths.state, exist_ok=True)
+    history = paths.file("history.jsonl")
+    append_line(history, json.dumps(row) + "\n", 0o644)
+    if os.path.getsize(history) > HISTORY_TRIM_AT:
+        with state_lock(paths):
+            rows = read_history(paths, now - HISTORY_KEEP)
+            tmp = f"{history}.tmp"
+            with open(tmp, "w") as f:
+                f.writelines(json.dumps(r) + "\n" for r in rows)
+            os.replace(tmp, history)
+    started = False
+    if now - last_scan_attempt(paths) >= SCAN_EVERY and not scan_running(paths):
+        started = start_background_scan(paths)
+    return {"ok": True, "sample": row, "scanStarted": started}
+
+
+def lower_priority() -> None:
+    """CPU nice 19 and the idle IO class for this process and what it runs (du), with whatever the host has."""
+    try:
+        os.nice(19 - os.nice(0))
+    except OSError:
+        pass
+    if shutil.which("ionice"):
+        subprocess.run(["ionice", "-c3", "-p", str(os.getpid())], capture_output=True)
+
+
+def log(message: str) -> None:
+    print(f"vpsmon: {message}", file=sys.stderr, flush=True)
+
+
+def cmd_scan(paths: Paths, background: bool) -> dict:
+    if background:
+        if scan_running(paths):
+            return {"ok": True, "running": True}
+        if start_background_scan(paths):
+            return {"ok": True, "started": True}
+        if scan_running(paths):
+            return {"ok": True, "running": True}
+        raise Fail("err.scan-start")
+    os.makedirs(paths.state, exist_ok=True)
+    fd = os.open(paths.file("scan.lock"), os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(fd)
+        return {"ok": True, "running": True}
+    os.utime(fd)
+    lower_priority()
+    started = time.time()
+    live = Live(paths, started)
+    actions = []
+    for action in published(live):
+        t = time.monotonic()
+        try:
+            items = action.plan(live)
+        except Exception as e:  # one broken source (docker down, say) must not cost the other actions
+            log(f"{action.id}: {e}")
+            continue
+        summary = action.summary(items)
+        log(f"{action.id}: {len(items)} items, {summary['bytes']} bytes, {time.monotonic() - t:.0f}s")
+        if summary["bytes"] > 0:
+            actions.append(summary)
+    # The actions first: the map's du pass over the whole disk takes much longer, and a rescan should not wait on it.
+    write_scan(paths, started, actions, None)
+    t = time.monotonic()
+    try:
+        disk_map = measure_map()
+        log(f"map: {len(disk_map['groups'])} groups, {time.monotonic() - t:.0f}s")
+    except Fail as e:
+        disk_map = None
+        log(f"map: {e}")
+    scan = write_scan(paths, started, actions, disk_map)
+    os.close(fd)
+    groups = [{"id": g["id"], "bytes": g["bytes"]} for g in (scan["map"] or {}).get("groups", [])]
+    return {"ok": True, "at": scan["at"], "actions": [{"id": a["id"], "bytes": a["bytes"]} for a in scan["actions"]], "map": groups}
+
+
+def write_scan(paths: Paths, started: float, actions: list[dict], disk_map: dict | None) -> dict:
+    """Saves a scan's results, minus the actions applied since it started; without a map it keeps the last one."""
+    with state_lock(paths):
+        previous = read_scan(paths)
+        applied = {k: v for k, v in (previous.get("appliedAt") or {}).items() if v >= started}
+        actions = sorted((a for a in actions if a["id"] not in applied), key=lambda a: -a["bytes"])
+        scan = {
+            "schema": SCHEMA,
+            "at": round(time.time(), 1),
+            "startedAt": started,
+            "actions": actions,
+            "map": disk_map or previous.get("map"),
+            "appliedAt": applied,
+        }
+        write_json_atomic(paths.file("scan.json"), scan)
+    return scan
+
+
+def act_disk(paths: Paths, action: DiskAction, dry_run: bool, now: float, tr: Text) -> dict:
+    scan = read_scan(paths)
+    cached = next((a for a in scan.get("actions", []) if a.get("id") == action.id), None)
+    result = {"ok": True, "id": action.id, "dryRun": dry_run}
+    if cached is None:
+        return {**result, "freedBytes": 0, "message": tr("act.nothing"), "items": []}
+    refs = None if action.replan else [i["ref"] for i in cached["items"]]
+    live = Live(paths, now, scanned_bytes={i["ref"]: i["bytes"] for i in cached["items"]})
+    if dry_run:
+        items = action.plan(live, within=refs)
+        planned = sum(i.bytes for i in items)
+        message = tr("act.would-free", count=tr.count(len(items), "item")) if items else tr("act.nothing")
+        return {**result, "freedBytes": planned, "message": message, "items": [i.public() for i in items[:MAX_ITEMS]]}
+    with state_lock(paths, wait=False):
+        done, failed = action.apply(live, action.candidates(live) if refs is None else refs)
+        freed = sum(i.bytes for i in done)
+        scan = read_scan(paths) or {"schema": SCHEMA}
+        scan["actions"] = [a for a in scan.get("actions", []) if a.get("id") != action.id]
+        scan.setdefault("appliedAt", {})[action.id] = now
+        write_json_atomic(paths.file("scan.json"), scan)
+        if not done and not failed:
+            message = tr("act.nothing")
+        else:
+            message = tr("act.freed", count=tr.count(len(done), "item"))
+            if failed:
+                message = tr("act.failed", freed=message, count=tr.count(failed, "failed"))
+        shown = [i.public() for i in done[:MAX_ITEMS]]
+        audit(paths, {"id": action.id, "count": len(done), "items": shown, "freedBytes": freed, "result": message})
+    return {**result, "freedBytes": freed, "message": message, "items": shown}
+
+
+def pidfd_for(pid: int, start: int) -> int | None:
+    """A pidfd for `pid` only while it is still the process that started at `start`, so later signals cannot hit a reused PID."""
+    try:
+        fd = os.pidfd_open(pid)
+    except OSError:
+        return None
+    p = read_proc("/proc", pid)
+    if p is None or p.start != start:
+        os.close(fd)
+        return None
+    return fd
+
+
+def send(fd: int, sig: int) -> None:
+    try:
+        signal.pidfd_send_signal(fd, sig)
+    except ProcessLookupError:
+        pass
+
+
+def wait_gone(fd: int, secs: float) -> bool:
+    poller = select.poll()
+    poller.register(fd, select.POLLIN)
+    return bool(poller.poll(int(secs * 1000)))
+
+
+def end_tree(pid: int, start: int, rest: list[tuple[int, int]], last_check: Callable[[], None] | None = None) -> bool:
+    """Ends `pid` while it is still the process that started at `start`: SIGTERM through a pidfd, 10 s, SIGKILL. Then
+    SIGTERM to each snapshotted descendant (pid, start) still alive as the same process. Never by name. `last_check`
+    runs once the pidfd pins the process and may refuse by raising Fail. False when `pid` was already gone."""
+    fd = pidfd_for(pid, start)
+    if fd is None:
+        return False
+    try:
+        if last_check:
+            last_check()
+        send(fd, signal.SIGTERM)
+        if not wait_gone(fd, 10):
+            send(fd, signal.SIGKILL)
+            wait_gone(fd, 5)
+    finally:
+        os.close(fd)
+    for q, q_start in rest:
+        child = pidfd_for(q, q_start)
+        if child is not None:
+            send(child, signal.SIGTERM)
+            os.close(child)
+    return True
+
+
+def tree_items(procs: dict[int, Proc], tree: list[int]) -> list[dict]:
+    return [{"label": f"{procs[q].comm} {q}", "bytes": procs[q].mem or 0} for q in tree]
+
+
+def note_closed(session: Session, view: dict, now: float) -> None:
+    """Appends the resume line to the worker's $CLAUDE_CONFIG_DIR/vpsmon-closed-sessions.md, as the worker's user: the
+    folder comes from that user's environment, so root must not be the one writing there."""
+    when = time.strftime("%Y-%m-%d %H:%M", time.localtime(now))
+    resume = f"cd {shlex.quote(view['workspace'])} && {view['resumeCommand']}"
+    line = f"- {when} · **{view['name']}** · `{resume}`\n"
+    try:
+        as_user(session.proc.uid, append_line, os.path.join(session.cfg, CLOSED_NOTES), line, 0o644)
+    except OSError as e:
+        log(f"{CLOSED_NOTES}: {e}")
+
+
+def act_worker(paths: Paths, ident: str, dry_run: bool, now: float, tr: Text) -> dict:
+    m = WORKER_ID_RE.fullmatch(ident)
+    if not m:
+        raise Fail("err.worker-id")
+    pid, start = int(m.group(1)), int(m.group(2))
+    procs = read_procs(paths.proc)
+    p = procs.get(pid)
+    if p is None or p.start != start or p.comm != "claude":
+        raise Fail("err.worker-gone")
+    session = next((s for s in find_sessions(procs, paths) if s.proc.pid == pid), None)
+    if session is None:
+        raise Fail("err.no-session")
+    children = children_of(procs)
+    view = worker_view(session, procs, children, now, paths.proc)
+    if not view["closable"]:
+        raise Fail("err.not-closable")
+    tree = [pid, *descendants(children, pid)]
+    items = tree_items(procs, tree)
+    result = {"ok": True, "id": ident, "freedBytes": sum(i["bytes"] for i in items), "dryRun": dry_run,
+              "items": items[:MAX_ITEMS]}
+    result["resumeCommand"] = view["resumeCommand"]
+    if dry_run:
+        return {**result, "message": tr("act.would-close", name=view["name"], count=tr.count(len(tree), "process"))}
+    def still_idle() -> None:
+        latest = read_json(os.path.join(session.cfg, "sessions", f"{pid}.json")) or {}
+        if latest.get("status") != "idle":
+            raise Fail("err.became-busy")
+
+    if not end_tree(pid, start, [(q, procs[q].start) for q in tree[1:]], still_idle):
+        raise Fail("err.worker-gone")
+    note_closed(session, view, now)
+    message = tr("act.closed", name=view["name"])
+    audit(paths, {"id": ident, "count": len(tree), "items": items[:MAX_ITEMS], "freedBytes": result["freedBytes"],
+                  "result": message, "resumeCommand": f"cd {shlex.quote(view['workspace'])} && {view['resumeCommand']}"})
+    return {**result, "message": message}
+
+
+def act_proc(paths: Paths, ident: str, dry_run: bool, now: float, tr: Text) -> dict:
+    m = PROC_ID_RE.fullmatch(ident)
+    if not m:
+        raise Fail("err.proc-id")
+    pid, start = int(m.group(1)), int(m.group(2))
+    procs = read_procs(paths.proc)
+    p = procs.get(pid)
+    if p is None or p.start != start:
+        raise Fail("err.proc-gone")
+    children = children_of(procs)
+    protected = {s.proc.pid for s in find_sessions(procs, paths)} | {os.getpid()}
+    if not killable(pid, procs, children, protected, lambda q: exe_of(paths.proc, q)):
+        raise Fail("err.not-killable", name=p.comm)
+    tree = [pid, *descendants(children, pid)]
+    items = tree_items(procs, tree)
+    freed = sum(i["bytes"] for i in items)
+    result = {"ok": True, "id": ident, "freedBytes": freed, "dryRun": dry_run, "items": items[:MAX_ITEMS]}
+    count = tr.count(len(tree), "process")
+    if dry_run:
+        return {**result, "message": tr("act.would-end", name=p.comm, count=count)}
+    if not end_tree(pid, start, [(q, procs[q].start) for q in tree[1:]]):
+        raise Fail("err.proc-gone")
+    message = tr("act.ended", name=p.comm, count=count)
+    audit(paths, {"id": ident, "count": len(tree), "items": items[:MAX_ITEMS], "freedBytes": freed, "result": message})
+    return {**result, "message": message}
+
+
+def cmd_uninstall(paths: Paths) -> dict:
+    """Removes what the installer added, keeping the audit log. Rerunning removes nothing."""
+    # systemctl manages only the real unit folder: under a test prefix there is nothing for it to stop.
+    systemd = has_systemd() and all(os.path.dirname(u) == SYSTEMD_UNITS for u in paths.units)
+    if systemd:
+        for cmd in (["disable", "--now", "vpsmon-sample.timer"], ["stop", "vpsmon-scan"]):
+            run(["systemctl", *cmd], ok_codes=tuple(range(256)), timeout=60)
+    removed = []
+    for path in (*paths.units, paths.sudoers, os.path.dirname(paths.config), paths.state, paths.bin):
+        if os.path.lexists(path):
+            remove_tree(path)
+            removed.append(path)
+    if systemd and set(paths.units) & set(removed):
+        run(["systemctl", "daemon-reload"], ok_codes=tuple(range(256)), timeout=60)
+    return {"ok": True, "removed": removed}
+
+
+def parse_lang(argv: list[str]) -> tuple[Text, list[str]]:
+    """`--lang en|es` before the command; English when it is not there."""
+    if argv[:1] != ["--lang"]:
+        return Text("en"), argv
+    if len(argv) < 2 or argv[1] not in MESSAGES:
+        raise Usage
+    return Text(argv[1]), argv[2:]
+
+
+def needs_root(args: list[str]) -> bool:
+    """Whether the command in `args` needs root; Usage when `args` is no command."""
+    match args:
+        case ["version"]:
+            return False
+        case ["status"] | ["sample"] | ["scan"] | ["scan", "--background"] | ["uninstall"] | ["act", _] | [
+            "act", _, "--dry-run"
+        ]:
+            return True
+    raise Usage
+
+
+def become_root(argv: list[str]) -> None:
+    """Runs this same command again as `sudo -n <this script> <argv>`. When sudo refuses (no rule, a password needed),
+    its own message reaches the app on stderr."""
+    try:
+        os.execvp("sudo", ["sudo", "-n", SELF, *argv])
+    except FileNotFoundError:
+        print("vpsmon: sudo: command not found", file=sys.stderr, flush=True)
+        raise Fail("err.no-sudo") from None
+
+
+def dispatch(args: list[str], paths: Paths, tr: Text) -> dict:
+    now = time.time()
+    match args:
+        case ["version"]:
+            return {"ok": True, "version": VERSION, "schema": SCHEMA}
+        case ["uninstall"]:
+            return cmd_uninstall(paths)
+        case ["status"]:
+            return cmd_status(paths, now, tr)
+        case ["sample"]:
+            return cmd_sample(paths, now)
+        case ["scan"]:
+            return cmd_scan(paths, background=False)
+        case ["scan", "--background"]:
+            return cmd_scan(paths, background=True)
+        case ["act", ident] | ["act", ident, "--dry-run"]:
+            dry_run = len(args) == 3
+            if ident.startswith("worker:"):
+                return act_worker(paths, ident, dry_run, now, tr)
+            if ident.startswith("proc:"):
+                return act_proc(paths, ident, dry_run, now, tr)
+            if ident not in ACTIONS:
+                raise Fail("err.unknown-action", id=ident)
+            return act_disk(paths, ACTIONS[ident], dry_run, now, tr)
+    raise Usage
+
+
+def main() -> int:
+    tr = Text("en")
+    try:
+        tr, args = parse_lang(sys.argv[1:])
+        if needs_root(args) and os.geteuid() != 0 and not os.environ.get("VPSMON_PREFIX"):
+            become_root(sys.argv[1:])
+        out, code = dispatch(args, Paths.from_env(), tr), 0
+    except Usage:
+        out, code = {"ok": False, "error": tr("usage")}, 2
+    except Fail as e:
+        out, code = {"ok": False, "error": e.text(tr)}, 1
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        out, code = {"ok": False, "error": tr("err.internal", detail=str(e))}, 1
+    print(json.dumps(out, ensure_ascii=False))
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

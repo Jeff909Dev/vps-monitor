@@ -1,0 +1,3390 @@
+{
+  "schema": 2,
+  "ok": true,
+  "version": "0.2.0",
+  "host": "web-1",
+  "at": 1795264909.3,
+  "uptimeSec": 3283000,
+  "cpu": {
+    "cores": 8,
+    "load1": 2.37,
+    "load5": 1.98,
+    "load15": 1.64
+  },
+  "memory": {
+    "totalBytes": 17179869184,
+    "availableBytes": 5046586572,
+    "swapTotalBytes": 4294967296,
+    "swapUsedBytes": 966367641,
+    "processBytes": 12025908428,
+    "groups": [
+      {
+        "name": "node",
+        "bytes": 4187593113,
+        "count": 23,
+        "processes": [
+          {
+            "id": "proc:41822:303100000",
+            "pid": 41822,
+            "user": "deploy",
+            "command": "node /srv/api/dist/server.js --port 3000",
+            "bytes": 1237319680,
+            "treeBytes": 1530920960,
+            "children": 3,
+            "startedAt": 1795012909.3,
+            "killable": true
+          },
+          {
+            "id": "proc:41907:303100000",
+            "pid": 41907,
+            "user": "deploy",
+            "command": "node /srv/web/.next/standalone/server.js",
+            "bytes": 901775360,
+            "treeBytes": 901775360,
+            "children": 0,
+            "startedAt": 1795012909.3,
+            "killable": true
+          },
+          {
+            "id": "proc:58113:326500000",
+            "pid": 58113,
+            "user": "deploy",
+            "command": "node /home/deploy/code/api/node_modules/.bin/vitest --watch",
+            "bytes": 639631360,
+            "treeBytes": 828375040,
+            "children": 4,
+            "startedAt": 1795246909.3,
+            "killable": true
+          },
+          {
+            "id": "proc:60231:327220000",
+            "pid": 60231,
+            "user": "deploy",
+            "command": "node /home/deploy/.npm/_npx/9c1f/node_modules/.bin/mcp-server-filesystem /home/deploy/code",
+            "bytes": 251658240,
+            "treeBytes": 251658240,
+            "children": 0,
+            "startedAt": 1795254109.3,
+            "killable": true
+          },
+          {
+            "id": "proc:61002:303100000",
+            "pid": 61002,
+            "user": "deploy",
+            "command": "node /srv/worker/dist/queue.js",
+            "bytes": 220200960,
+            "treeBytes": 220200960,
+            "children": 0,
+            "startedAt": 1795012909.3,
+            "killable": true
+          },
+          {
+            "id": "proc:61877:256300000",
+            "pid": 61877,
+            "user": "root",
+            "command": "node /usr/lib/node_modules/pm2/bin/pm2 daemon",
+            "bytes": 99614720,
+            "treeBytes": 99614720,
+            "children": 0,
+            "startedAt": 1794544909.3,
+            "killable": true
+          }
+        ]
+      },
+      {
+        "name": "postgres",
+        "bytes": 2576980377,
+        "count": 12,
+        "processes": [
+          {
+            "id": "proc:1544:317500000",
+            "pid": 1544,
+            "user": "postgres",
+            "command": "postgres: 16/main: deploy app_production 127.0.0.1(51234) idle",
+            "bytes": 671088640,
+            "treeBytes": 671088640,
+            "children": 0,
+            "startedAt": 1795156909.3,
+            "killable": true
+          },
+          {
+            "id": "proc:1203:4300000",
+            "pid": 1203,
+            "user": "postgres",
+            "command": "/usr/lib/postgresql/16/bin/postgres -D /var/lib/postgresql/16/main",
+            "bytes": 440401920,
+            "treeBytes": 2569011200,
+            "children": 11,
+            "startedAt": 1792024909.3,
+            "killable": true
+          },
+          {
+            "id": "proc:1547:317500000",
+            "pid": 1547,
+            "user": "postgres",
+            "command": "postgres: 16/main: deploy app_production 127.0.0.1(51240) idle",
+            "bytes": 398458880,
+            "treeBytes": 398458880,
+            "children": 0,
+            "startedAt": 1795156909.3,
+            "killable": true
+          },
+          {
+            "id": "proc:1219:4300000",
+            "pid": 1219,
+            "user": "postgres",
+            "command": "postgres: 16/main: checkpointer",
+            "bytes": 325058560,
+            "treeBytes": 325058560,
+            "children": 0,
+            "startedAt": 1792024909.3,
+            "killable": true
+          },
+          {
+            "id": "proc:1221:4300000",
+            "pid": 1221,
+            "user": "postgres",
+            "command": "postgres: 16/main: autovacuum launcher",
+            "bytes": 125829120,
+            "treeBytes": 125829120,
+            "children": 0,
+            "startedAt": 1792024909.3,
+            "killable": true
+          },
+          {
+            "id": "proc:1220:4300000",
+            "pid": 1220,
+            "user": "postgres",
+            "command": "postgres: 16/main: background writer",
+            "bytes": 100663296,
+            "treeBytes": 100663296,
+            "children": 0,
+            "startedAt": 1792024909.3,
+            "killable": true
+          }
+        ]
+      },
+      {
+        "name": "claude",
+        "bytes": 2040109465,
+        "count": 4,
+        "processes": [
+          {
+            "id": "proc:52310:326136400",
+            "pid": 52310,
+            "user": "deploy",
+            "command": "claude --dangerously-skip-permissions",
+            "bytes": 859832320,
+            "treeBytes": 1300234240,
+            "children": 6,
+            "startedAt": 1795243273.3,
+            "killable": false
+          },
+          {
+            "id": "proc:49876:322648000",
+            "pid": 49876,
+            "user": "deploy",
+            "command": "claude",
+            "bytes": 545259520,
+            "treeBytes": 639631360,
+            "children": 2,
+            "startedAt": 1795208389.3,
+            "killable": false
+          },
+          {
+            "id": "proc:47120:301588000",
+            "pid": 47120,
+            "user": "deploy",
+            "command": "claude --model opus",
+            "bytes": 346030080,
+            "treeBytes": 398458880,
+            "children": 1,
+            "startedAt": 1794997789.3,
+            "killable": false
+          },
+          {
+            "id": "proc:33018:306916000",
+            "pid": 33018,
+            "user": "root",
+            "command": "claude",
+            "bytes": 283115520,
+            "treeBytes": 304087040,
+            "children": 1,
+            "startedAt": 1795051069.3,
+            "killable": false
+          }
+        ]
+      },
+      {
+        "name": "chrome",
+        "bytes": 1395864371,
+        "count": 17,
+        "processes": [
+          {
+            "id": "proc:58840:326860000",
+            "pid": 58840,
+            "user": "deploy",
+            "command": "/opt/google/chrome/chrome --headless=new --remote-debugging-port=9222 --user-data-dir=/tmp/pw-profile",
+            "bytes": 325058560,
+            "treeBytes": 1373634560,
+            "children": 16,
+            "startedAt": 1795250509.3,
+            "killable": true
+          },
+          {
+            "id": "proc:58871:326860000",
+            "pid": 58871,
+            "user": "deploy",
+            "command": "/opt/google/chrome/chrome --type=renderer --headless=new --lang=en-US",
+            "bytes": 262144000,
+            "treeBytes": 262144000,
+            "children": 0,
+            "startedAt": 1795250509.3,
+            "killable": true
+          },
+          {
+            "id": "proc:58873:326860000",
+            "pid": 58873,
+            "user": "deploy",
+            "command": "/opt/google/chrome/chrome --type=renderer --headless=new --lang=en-US",
+            "bytes": 220200960,
+            "treeBytes": 220200960,
+            "children": 0,
+            "startedAt": 1795250509.3,
+            "killable": true
+          },
+          {
+            "id": "proc:58850:326860000",
+            "pid": 58850,
+            "user": "deploy",
+            "command": "/opt/google/chrome/chrome --type=gpu-process --headless=new",
+            "bytes": 125829120,
+            "treeBytes": 125829120,
+            "children": 0,
+            "startedAt": 1795250509.3,
+            "killable": true
+          },
+          {
+            "id": "proc:58875:326860000",
+            "pid": 58875,
+            "user": "deploy",
+            "command": "/opt/google/chrome/chrome --type=renderer --headless=new --lang=en-US",
+            "bytes": 99614720,
+            "treeBytes": 99614720,
+            "children": 0,
+            "startedAt": 1795250509.3,
+            "killable": true
+          },
+          {
+            "id": "proc:58852:326860000",
+            "pid": 58852,
+            "user": "deploy",
+            "command": "/opt/google/chrome/chrome --type=utility --utility-sub-type=network.mojom.NetworkService",
+            "bytes": 62914560,
+            "treeBytes": 62914560,
+            "children": 0,
+            "startedAt": 1795250509.3,
+            "killable": true
+          }
+        ]
+      },
+      {
+        "name": "dockerd",
+        "bytes": 450971566,
+        "count": 1,
+        "processes": [
+          {
+            "id": "proc:980:340000",
+            "pid": 980,
+            "user": "root",
+            "command": "/usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock",
+            "bytes": 450887680,
+            "treeBytes": 450887680,
+            "children": 0,
+            "startedAt": 1791985309.3,
+            "killable": false
+          }
+        ]
+      },
+      {
+        "name": "python3",
+        "bytes": 386547056,
+        "count": 3,
+        "processes": [
+          {
+            "id": "proc:23011:327940000",
+            "pid": 23011,
+            "user": "deploy",
+            "command": "python3 /srv/reports/nightly.py --since 7d",
+            "bytes": 272629760,
+            "treeBytes": 272629760,
+            "children": 0,
+            "startedAt": 1795261309.3,
+            "killable": true
+          },
+          {
+            "id": "proc:1388:340000",
+            "pid": 1388,
+            "user": "root",
+            "command": "/usr/bin/python3 /usr/bin/networkd-dispatcher --run-startup-triggers",
+            "bytes": 50331648,
+            "treeBytes": 50331648,
+            "children": 0,
+            "startedAt": 1791985309.3,
+            "killable": true
+          },
+          {
+            "id": "proc:1501:340000",
+            "pid": 1501,
+            "user": "root",
+            "command": "/usr/bin/python3 /usr/share/unattended-upgrades/unattended-upgrade-shutdown",
+            "bytes": 33554432,
+            "treeBytes": 33554432,
+            "children": 0,
+            "startedAt": 1791985309.3,
+            "killable": true
+          }
+        ]
+      },
+      {
+        "name": "redis-server",
+        "bytes": 225485783,
+        "count": 1,
+        "processes": [
+          {
+            "id": "proc:1190:340000",
+            "pid": 1190,
+            "user": "redis",
+            "command": "/usr/bin/redis-server 127.0.0.1:6379",
+            "bytes": 225443840,
+            "treeBytes": 225443840,
+            "children": 0,
+            "startedAt": 1791985309.3,
+            "killable": true
+          }
+        ]
+      },
+      {
+        "name": "nginx",
+        "bytes": 96636764,
+        "count": 5,
+        "processes": [
+          {
+            "id": "proc:1301:340000",
+            "pid": 1301,
+            "user": "www-data",
+            "command": "nginx: worker process",
+            "bytes": 23068672,
+            "treeBytes": 23068672,
+            "children": 0,
+            "startedAt": 1791985309.3,
+            "killable": true
+          },
+          {
+            "id": "proc:1302:340000",
+            "pid": 1302,
+            "user": "www-data",
+            "command": "nginx: worker process",
+            "bytes": 22020096,
+            "treeBytes": 22020096,
+            "children": 0,
+            "startedAt": 1791985309.3,
+            "killable": true
+          },
+          {
+            "id": "proc:1303:340000",
+            "pid": 1303,
+            "user": "www-data",
+            "command": "nginx: worker process",
+            "bytes": 19922944,
+            "treeBytes": 19922944,
+            "children": 0,
+            "startedAt": 1791985309.3,
+            "killable": true
+          },
+          {
+            "id": "proc:1304:340000",
+            "pid": 1304,
+            "user": "www-data",
+            "command": "nginx: worker process",
+            "bytes": 18874368,
+            "treeBytes": 18874368,
+            "children": 0,
+            "startedAt": 1791985309.3,
+            "killable": true
+          },
+          {
+            "id": "proc:1288:340000",
+            "pid": 1288,
+            "user": "root",
+            "command": "nginx: master process /usr/sbin/nginx -g daemon on; master_process on;",
+            "bytes": 12582912,
+            "treeBytes": 109051904,
+            "children": 4,
+            "startedAt": 1791985309.3,
+            "killable": true
+          }
+        ]
+      }
+    ]
+  },
+  "disk": {
+    "mount": "/",
+    "totalBytes": 161061273600,
+    "usedBytes": 130352257433,
+    "freeBytes": 22655952486,
+    "growthBytesPerHour": 214000000.0,
+    "fullInHours": 105.86893685046729
+  },
+  "services": [
+    {
+      "name": "nginx",
+      "active": true
+    },
+    {
+      "name": "postgresql",
+      "active": true
+    },
+    {
+      "name": "docker",
+      "active": true
+    }
+  ],
+  "oomKills": [
+    {
+      "at": 1795246189.3,
+      "process": "chrome",
+      "pid": 57012
+    }
+  ],
+  "workers": [
+    {
+      "id": "worker:52310:326136400",
+      "pid": 52310,
+      "user": "deploy",
+      "name": "api-refactor",
+      "workspace": "/home/deploy/code/api",
+      "state": "busy",
+      "stateSince": 1795264873.3,
+      "lastActivity": 1795264873.3,
+      "startedAt": 1795243273.3,
+      "memBytes": 1299227607,
+      "processes": 7,
+      "sessionId": "1f0e9d8c-7b6a-4f5e-8d4c-3b2a1f0e9d8c",
+      "version": "2.1.330",
+      "resumeCommand": "claude --dangerously-skip-permissions --resume 1f0e9d8c-7b6a-4f5e-8d4c-3b2a1f0e9d8c",
+      "closable": false
+    },
+    {
+      "id": "worker:47120:301588000",
+      "pid": 47120,
+      "user": "deploy",
+      "name": "billing-tests",
+      "workspace": "/home/deploy/code/billing",
+      "state": "idle",
+      "stateSince": 1795084189.3,
+      "lastActivity": 1795084189.3,
+      "startedAt": 1794997789.3,
+      "memBytes": 397284474,
+      "processes": 2,
+      "sessionId": "9e8d7c6b-5a4f-4e3d-9c2b-1a0f9e8d7c6b",
+      "version": "2.1.327",
+      "resumeCommand": "claude --model opus --resume 9e8d7c6b-5a4f-4e3d-9c2b-1a0f9e8d7c6b",
+      "closable": true
+    },
+    {
+      "id": "worker:33018:306916000",
+      "pid": 33018,
+      "user": "root",
+      "name": "infra-notes",
+      "workspace": "/root/infra",
+      "state": "idle",
+      "stateSince": 1795169869.3,
+      "lastActivity": 1795169869.3,
+      "startedAt": 1795051069.3,
+      "memBytes": 300647710,
+      "processes": 2,
+      "sessionId": "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
+      "version": "2.1.324",
+      "resumeCommand": "claude --resume 2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
+      "closable": true
+    },
+    {
+      "id": "worker:49876:322648000",
+      "pid": 49876,
+      "user": "deploy",
+      "name": "docs-site",
+      "workspace": "/home/deploy/code/docs",
+      "state": "idle",
+      "stateSince": 1795262389.3,
+      "lastActivity": 1795262389.3,
+      "startedAt": 1795208389.3,
+      "memBytes": 644245094,
+      "processes": 3,
+      "sessionId": "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d",
+      "version": "2.1.330",
+      "resumeCommand": "claude --resume 5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d",
+      "closable": true
+    }
+  ],
+  "history": [
+    {
+      "at": 1795178809.3,
+      "diskUsedBytes": 125234090767,
+      "memAvailableBytes": 5798205849,
+      "swapUsedBytes": 751619276,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795179109.3,
+      "diskUsedBytes": 125278795864,
+      "memAvailableBytes": 5847297785,
+      "swapUsedBytes": 757241453,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795179409.3,
+      "diskUsedBytes": 125322953490,
+      "memAvailableBytes": 5896292691,
+      "swapUsedBytes": 762823378,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795179709.3,
+      "diskUsedBytes": 125366027328,
+      "memAvailableBytes": 5945093722,
+      "swapUsedBytes": 768325129,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795180009.3,
+      "diskUsedBytes": 125407503139,
+      "memAvailableBytes": 5993604397,
+      "swapUsedBytes": 773707450,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795180309.3,
+      "diskUsedBytes": 125446899246,
+      "memAvailableBytes": 6041728786,
+      "swapUsedBytes": 778932067,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795180609.3,
+      "diskUsedBytes": 125483776339,
+      "memAvailableBytes": 6089371688,
+      "swapUsedBytes": 783962013,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795180909.3,
+      "diskUsedBytes": 125517746430,
+      "memAvailableBytes": 6136438813,
+      "swapUsedBytes": 788761926,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795181209.3,
+      "diskUsedBytes": 125548480757,
+      "memAvailableBytes": 6182836957,
+      "swapUsedBytes": 793298343,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795181509.3,
+      "diskUsedBytes": 125575716484,
+      "memAvailableBytes": 6228474183,
+      "swapUsedBytes": 797539980,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795181809.3,
+      "diskUsedBytes": 125599262049,
+      "memAvailableBytes": 6273259991,
+      "swapUsedBytes": 801457985,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795182109.3,
+      "diskUsedBytes": 125619001075,
+      "memAvailableBytes": 6317105491,
+      "swapUsedBytes": 805026179,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795182409.3,
+      "diskUsedBytes": 125634894737,
+      "memAvailableBytes": 6359923568,
+      "swapUsedBytes": 808221275,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795182709.3,
+      "diskUsedBytes": 125646982551,
+      "memAvailableBytes": 6401629051,
+      "swapUsedBytes": 811023063,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795183009.3,
+      "diskUsedBytes": 125655381575,
+      "memAvailableBytes": 6442138872,
+      "swapUsedBytes": 813414584,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795183309.3,
+      "diskUsedBytes": 125660284019,
+      "memAvailableBytes": 6481372222,
+      "swapUsedBytes": 815382266,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795183609.3,
+      "diskUsedBytes": 125661953328,
+      "memAvailableBytes": 6519250705,
+      "swapUsedBytes": 816916039,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795183909.3,
+      "diskUsedBytes": 125660718821,
+      "memAvailableBytes": 6555698485,
+      "swapUsedBytes": 818009416,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795184209.3,
+      "diskUsedBytes": 125656968977,
+      "memAvailableBytes": 6590642431,
+      "swapUsedBytes": 818659545,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795184509.3,
+      "diskUsedBytes": 125651143518,
+      "memAvailableBytes": 6624012254,
+      "swapUsedBytes": 818867238,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795184809.3,
+      "diskUsedBytes": 125643724458,
+      "memAvailableBytes": 6655740640,
+      "swapUsedBytes": 818636958,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795185109.3,
+      "diskUsedBytes": 125635226276,
+      "memAvailableBytes": 6685763378,
+      "swapUsedBytes": 817976787,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795185409.3,
+      "diskUsedBytes": 125626185436,
+      "memAvailableBytes": 6714019481,
+      "swapUsedBytes": 816898357,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795185709.3,
+      "diskUsedBytes": 125617149458,
+      "memAvailableBytes": 6740451300,
+      "swapUsedBytes": 815416755,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795186009.3,
+      "diskUsedBytes": 125608665764,
+      "memAvailableBytes": 6765004635,
+      "swapUsedBytes": 813550395,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795186309.3,
+      "diskUsedBytes": 125601270522,
+      "memAvailableBytes": 6787628835,
+      "swapUsedBytes": 811320872,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795186609.3,
+      "diskUsedBytes": 125595477728,
+      "memAvailableBytes": 6808276896,
+      "swapUsedBytes": 808752777,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795186909.3,
+      "diskUsedBytes": 125591768728,
+      "memAvailableBytes": 6826905551,
+      "swapUsedBytes": 805873502,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795187209.3,
+      "diskUsedBytes": 125590582413,
+      "memAvailableBytes": 6843475346,
+      "swapUsedBytes": 802713003,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795187509.3,
+      "diskUsedBytes": 125592306279,
+      "memAvailableBytes": 6857950721,
+      "swapUsedBytes": 799303562,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795187809.3,
+      "diskUsedBytes": 125597268535,
+      "memAvailableBytes": 6870300074,
+      "swapUsedBytes": 795679518,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795188109.3,
+      "diskUsedBytes": 125605731407,
+      "memAvailableBytes": 6880495822,
+      "swapUsedBytes": 791876980,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795188409.3,
+      "diskUsedBytes": 125617885804,
+      "memAvailableBytes": 6888514450,
+      "swapUsedBytes": 787933531,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795188709.3,
+      "diskUsedBytes": 125633847427,
+      "memAvailableBytes": 6894336561,
+      "swapUsedBytes": 783887920,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795189009.3,
+      "diskUsedBytes": 125653654408,
+      "memAvailableBytes": 6897946908,
+      "swapUsedBytes": 779779737,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795189309.3,
+      "diskUsedBytes": 125677266537,
+      "memAvailableBytes": 6899334424,
+      "swapUsedBytes": 775649092,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795189609.3,
+      "diskUsedBytes": 125704566082,
+      "memAvailableBytes": 6898492243,
+      "swapUsedBytes": 771536277,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795189909.3,
+      "diskUsedBytes": 125735360180,
+      "memAvailableBytes": 6895417716,
+      "swapUsedBytes": 767481440,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795190209.3,
+      "diskUsedBytes": 125769384776,
+      "memAvailableBytes": 6890112410,
+      "swapUsedBytes": 763524248,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795190509.3,
+      "diskUsedBytes": 125806310001,
+      "memAvailableBytes": 6882582110,
+      "swapUsedBytes": 759703561,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795190809.3,
+      "diskUsedBytes": 125845746882,
+      "memAvailableBytes": 6872836806,
+      "swapUsedBytes": 756057115,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795191109.3,
+      "diskUsedBytes": 125887255282,
+      "memAvailableBytes": 6860890674,
+      "swapUsedBytes": 752621203,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795191409.3,
+      "diskUsedBytes": 125930352858,
+      "memAvailableBytes": 6846762051,
+      "swapUsedBytes": 749430381,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795191709.3,
+      "diskUsedBytes": 125974524888,
+      "memAvailableBytes": 6830473397,
+      "swapUsedBytes": 746517183,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795192009.3,
+      "diskUsedBytes": 126019234761,
+      "memAvailableBytes": 6812051258,
+      "swapUsedBytes": 743911846,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795192309.3,
+      "diskUsedBytes": 126063934911,
+      "memAvailableBytes": 6791526208,
+      "swapUsedBytes": 741642067,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795192609.3,
+      "diskUsedBytes": 126108077964,
+      "memAvailableBytes": 6768932799,
+      "swapUsedBytes": 739732772,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795192909.3,
+      "diskUsedBytes": 126151127902,
+      "memAvailableBytes": 6744309491,
+      "swapUsedBytes": 738205909,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795193209.3,
+      "diskUsedBytes": 126192570974,
+      "memAvailableBytes": 6717698581,
+      "swapUsedBytes": 737080267,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795193509.3,
+      "diskUsedBytes": 126231926168,
+      "memAvailableBytes": 6689146122,
+      "swapUsedBytes": 736371322,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795193809.3,
+      "diskUsedBytes": 126268755008,
+      "memAvailableBytes": 6658701838,
+      "swapUsedBytes": 736091109,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795194109.3,
+      "diskUsedBytes": 126302670490,
+      "memAvailableBytes": 6626419027,
+      "swapUsedBytes": 736248121,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795194409.3,
+      "diskUsedBytes": 126333344965,
+      "memAvailableBytes": 6592354463,
+      "swapUsedBytes": 736847243,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795194709.3,
+      "diskUsedBytes": 126360516813,
+      "memAvailableBytes": 6556568288,
+      "swapUsedBytes": 737889705,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795195009.3,
+      "diskUsedBytes": 126383995778,
+      "memAvailableBytes": 6519123897,
+      "swapUsedBytes": 739373077,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795195309.3,
+      "diskUsedBytes": 126403666836,
+      "memAvailableBytes": 6480087819,
+      "swapUsedBytes": 741291289,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795195609.3,
+      "diskUsedBytes": 126419492549,
+      "memAvailableBytes": 6439529592,
+      "swapUsedBytes": 743634678,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795195909.3,
+      "diskUsedBytes": 126431513818,
+      "memAvailableBytes": 6397521631,
+      "swapUsedBytes": 746390070,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795196209.3,
+      "diskUsedBytes": 126439849055,
+      "memAvailableBytes": 6354139091,
+      "swapUsedBytes": 749540888,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795196509.3,
+      "diskUsedBytes": 126444691768,
+      "memAvailableBytes": 6309459725,
+      "swapUsedBytes": 753067291,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795196809.3,
+      "diskUsedBytes": 126446306624,
+      "memAvailableBytes": 6263563737,
+      "swapUsedBytes": 756946334,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795197109.3,
+      "diskUsedBytes": 126445024047,
+      "memAvailableBytes": 6216533631,
+      "swapUsedBytes": 761152160,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795197409.3,
+      "diskUsedBytes": 126441233496,
+      "memAvailableBytes": 6168454052,
+      "swapUsedBytes": 765656215,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795197709.3,
+      "diskUsedBytes": 126435375526,
+      "memAvailableBytes": 6119411633,
+      "swapUsedBytes": 770427480,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795198009.3,
+      "diskUsedBytes": 126427932808,
+      "memAvailableBytes": 6069494823,
+      "swapUsedBytes": 775432730,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795198309.3,
+      "diskUsedBytes": 126419420306,
+      "memAvailableBytes": 6018793726,
+      "swapUsedBytes": 780636807,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795198609.3,
+      "diskUsedBytes": 126410374776,
+      "memAvailableBytes": 5967399927,
+      "swapUsedBytes": 786002912,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795198909.3,
+      "diskUsedBytes": 126401343832,
+      "memAvailableBytes": 5915406321,
+      "swapUsedBytes": 791492907,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795199209.3,
+      "diskUsedBytes": 126392874794,
+      "memAvailableBytes": 5862906936,
+      "swapUsedBytes": 797067631,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795199509.3,
+      "diskUsedBytes": 126385503533,
+      "memAvailableBytes": 5809996756,
+      "swapUsedBytes": 802687223,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795199809.3,
+      "diskUsedBytes": 126379743554,
+      "memAvailableBytes": 5756771543,
+      "swapUsedBytes": 808311452,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795200109.3,
+      "diskUsedBytes": 126376075535,
+      "memAvailableBytes": 5703327652,
+      "swapUsedBytes": 813900048,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795200409.3,
+      "diskUsedBytes": 126374937534,
+      "memAvailableBytes": 5649761853,
+      "swapUsedBytes": 819413036,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795200709.3,
+      "diskUsedBytes": 126376716061,
+      "memAvailableBytes": 5596171146,
+      "swapUsedBytes": 824811065,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795201009.3,
+      "diskUsedBytes": 126381738210,
+      "memAvailableBytes": 5542652578,
+      "swapUsedBytes": 830055734,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795201309.3,
+      "diskUsedBytes": 126390264990,
+      "memAvailableBytes": 5489303059,
+      "swapUsedBytes": 835109908,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795201609.3,
+      "diskUsedBytes": 126402486007,
+      "memAvailableBytes": 5436219181,
+      "swapUsedBytes": 839938025,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795201909.3,
+      "diskUsedBytes": 126418515602,
+      "memAvailableBytes": 5383497033,
+      "swapUsedBytes": 844506391,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795202209.3,
+      "diskUsedBytes": 126438390526,
+      "memAvailableBytes": 5331232020,
+      "swapUsedBytes": 848783455,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795202509.3,
+      "diskUsedBytes": 126462069183,
+      "memAvailableBytes": 5279518684,
+      "swapUsedBytes": 852740075,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795202809.3,
+      "diskUsedBytes": 126489432483,
+      "memAvailableBytes": 5228450522,
+      "swapUsedBytes": 856349753,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795203109.3,
+      "diskUsedBytes": 126520286270,
+      "memAvailableBytes": 5178119815,
+      "swapUsedBytes": 859588858,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795203409.3,
+      "diskUsedBytes": 126554365269,
+      "memAvailableBytes": 5128617448,
+      "swapUsedBytes": 862436817,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795203709.3,
+      "diskUsedBytes": 126591338501,
+      "memAvailableBytes": 5080032740,
+      "swapUsedBytes": 864876291,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795204009.3,
+      "diskUsedBytes": 126630816020,
+      "memAvailableBytes": 5032453277,
+      "swapUsedBytes": 866893311,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795204309.3,
+      "diskUsedBytes": 126672356857,
+      "memAvailableBytes": 4985964744,
+      "swapUsedBytes": 868477399,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795204609.3,
+      "diskUsedBytes": 126715478009,
+      "memAvailableBytes": 4940650765,
+      "swapUsedBytes": 869621652,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795204909.3,
+      "diskUsedBytes": 126759664276,
+      "memAvailableBytes": 4896592744,
+      "swapUsedBytes": 870322800,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795205209.3,
+      "diskUsedBytes": 126804378753,
+      "memAvailableBytes": 4853869709,
+      "swapUsedBytes": 870581231,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795205509.3,
+      "diskUsedBytes": 126849073782,
+      "memAvailableBytes": 4812558167,
+      "swapUsedBytes": 870400992,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795205809.3,
+      "diskUsedBytes": 126893202095,
+      "memAvailableBytes": 4772731957,
+      "swapUsedBytes": 869789749,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795206109.3,
+      "diskUsedBytes": 126936227972,
+      "memAvailableBytes": 4734462111,
+      "swapUsedBytes": 868758732,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795206409.3,
+      "diskUsedBytes": 126977638153,
+      "memAvailableBytes": 4697816717,
+      "swapUsedBytes": 867322634,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795206709.3,
+      "diskUsedBytes": 127016952297,
+      "memAvailableBytes": 4662860795,
+      "swapUsedBytes": 865499495,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795207009.3,
+      "diskUsedBytes": 127053732763,
+      "memAvailableBytes": 4629656172,
+      "swapUsedBytes": 863310553,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795207309.3,
+      "diskUsedBytes": 127087593533,
+      "memAvailableBytes": 4598261362,
+      "swapUsedBytes": 860780064,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795207609.3,
+      "diskUsedBytes": 127118208073,
+      "memAvailableBytes": 4568731463,
+      "swapUsedBytes": 857935108,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795207909.3,
+      "diskUsedBytes": 127145315983,
+      "memAvailableBytes": 4541118044,
+      "swapUsedBytes": 854805359,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795208209.3,
+      "diskUsedBytes": 127168728310,
+      "memAvailableBytes": 4515469053,
+      "swapUsedBytes": 851422845,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795208509.3,
+      "diskUsedBytes": 127188331391,
+      "memAvailableBytes": 4491828726,
+      "swapUsedBytes": 847821681,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795208809.3,
+      "diskUsedBytes": 127204089167,
+      "memAvailableBytes": 4470237502,
+      "swapUsedBytes": 844037788,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795209109.3,
+      "diskUsedBytes": 127216043927,
+      "memAvailableBytes": 4450731947,
+      "swapUsedBytes": 840108597,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795209409.3,
+      "diskUsedBytes": 127224315438,
+      "memAvailableBytes": 4433344685,
+      "swapUsedBytes": 836072736,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795209709.3,
+      "diskUsedBytes": 127229098505,
+      "memAvailableBytes": 4418104337,
+      "swapUsedBytes": 831969717,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795210009.3,
+      "diskUsedBytes": 127230659010,
+      "memAvailableBytes": 4405035463,
+      "swapUsedBytes": 827839605,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795210309.3,
+      "diskUsedBytes": 127229328487,
+      "memAvailableBytes": 4394158524,
+      "swapUsedBytes": 823722690,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795210609.3,
+      "diskUsedBytes": 127225497368,
+      "memAvailableBytes": 4385489834,
+      "swapUsedBytes": 819659152,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795210909.3,
+      "diskUsedBytes": 127219607035,
+      "memAvailableBytes": 4379041535,
+      "swapUsedBytes": 815688730,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795211209.3,
+      "diskUsedBytes": 127212140823,
+      "memAvailableBytes": 4374821572,
+      "swapUsedBytes": 811850395,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795211509.3,
+      "diskUsedBytes": 127203614169,
+      "memAvailableBytes": 4372833678,
+      "swapUsedBytes": 808182027,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795211809.3,
+      "diskUsedBytes": 127194564120,
+      "memAvailableBytes": 4373077368,
+      "swapUsedBytes": 804720101,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795212109.3,
+      "diskUsedBytes": 127185538383,
+      "memAvailableBytes": 4375547938,
+      "swapUsedBytes": 801499388,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795212409.3,
+      "diskUsedBytes": 127177084169,
+      "memAvailableBytes": 4380236476,
+      "swapUsedBytes": 798552667,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795212709.3,
+      "diskUsedBytes": 127169737049,
+      "memAvailableBytes": 4387129877,
+      "swapUsedBytes": 795910455,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795213009.3,
+      "diskUsedBytes": 127164010037,
+      "memAvailableBytes": 4396210871,
+      "swapUsedBytes": 793600751,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795213309.3,
+      "diskUsedBytes": 127160383137,
+      "memAvailableBytes": 4407458050,
+      "swapUsedBytes": 791648811,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795213609.3,
+      "diskUsedBytes": 127159293570,
+      "memAvailableBytes": 4420845915,
+      "swapUsedBytes": 790076936,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795213909.3,
+      "diskUsedBytes": 127161126861,
+      "memAvailableBytes": 4436344918,
+      "swapUsedBytes": 788904286,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795214209.3,
+      "diskUsedBytes": 127166208987,
+      "memAvailableBytes": 4453921522,
+      "swapUsedBytes": 788146726,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795214509.3,
+      "diskUsedBytes": 127174799733,
+      "memAvailableBytes": 4473538265,
+      "swapUsedBytes": 787816692,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795214809.3,
+      "diskUsedBytes": 127187087405,
+      "memAvailableBytes": 4495153826,
+      "swapUsedBytes": 787923090,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795215109.3,
+      "diskUsedBytes": 127203184985,
+      "memAvailableBytes": 4518723108,
+      "swapUsedBytes": 788471220,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795215409.3,
+      "diskUsedBytes": 127223127838,
+      "memAvailableBytes": 4544197321,
+      "swapUsedBytes": 789462735,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795215709.3,
+      "diskUsedBytes": 127246872985,
+      "memAvailableBytes": 4571524074,
+      "swapUsedBytes": 790895627,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795216009.3,
+      "diskUsedBytes": 127274299982,
+      "memAvailableBytes": 4600647476,
+      "swapUsedBytes": 792764240,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795216309.3,
+      "diskUsedBytes": 127305213372,
+      "memAvailableBytes": 4631508239,
+      "swapUsedBytes": 795059322,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795216609.3,
+      "diskUsedBytes": 127339346671,
+      "memAvailableBytes": 4664043790,
+      "swapUsedBytes": 797768098,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795216909.3,
+      "diskUsedBytes": 127376367789,
+      "memAvailableBytes": 4698188394,
+      "swapUsedBytes": 800874377,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795217209.3,
+      "diskUsedBytes": 127415885806,
+      "memAvailableBytes": 4733873272,
+      "swapUsedBytes": 804358684,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795217509.3,
+      "diskUsedBytes": 127457458929,
+      "memAvailableBytes": 4771026735,
+      "swapUsedBytes": 808198422,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795217809.3,
+      "diskUsedBytes": 127500603496,
+      "memAvailableBytes": 4809574318,
+      "swapUsedBytes": 812368061,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795218109.3,
+      "diskUsedBytes": 127544803828,
+      "memAvailableBytes": 4849438920,
+      "swapUsedBytes": 816839342,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795218409.3,
+      "diskUsedBytes": 127589522739,
+      "memAvailableBytes": 4890540953,
+      "swapUsedBytes": 821581520,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795218709.3,
+      "diskUsedBytes": 127634212476,
+      "memAvailableBytes": 4932798488,
+      "swapUsedBytes": 826561608,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795219009.3,
+      "diskUsedBytes": 127678325880,
+      "memAvailableBytes": 4976127413,
+      "swapUsedBytes": 831744657,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795219309.3,
+      "diskUsedBytes": 127721327536,
+      "memAvailableBytes": 5020441592,
+      "swapUsedBytes": 837094042,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795219609.3,
+      "diskUsedBytes": 127762704675,
+      "memAvailableBytes": 5065653024,
+      "swapUsedBytes": 842571761,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795219909.3,
+      "diskUsedBytes": 127801977630,
+      "memAvailableBytes": 5111672016,
+      "swapUsedBytes": 848138757,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795220209.3,
+      "diskUsedBytes": 127838709602,
+      "memAvailableBytes": 5158407345,
+      "swapUsedBytes": 853755231,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795220509.3,
+      "diskUsedBytes": 127872515557,
+      "memAvailableBytes": 5205766436,
+      "swapUsedBytes": 859380978,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795220809.3,
+      "diskUsedBytes": 127903070079,
+      "memAvailableBytes": 5253655535,
+      "swapUsedBytes": 864975717,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795221109.3,
+      "diskUsedBytes": 127930113994,
+      "memAvailableBytes": 5301979885,
+      "swapUsedBytes": 870499421,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795221409.3,
+      "diskUsedBytes": 127953459648,
+      "memAvailableBytes": 5350643909,
+      "swapUsedBytes": 875912650,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795221709.3,
+      "diskUsedBytes": 127972994737,
+      "memAvailableBytes": 5399551384,
+      "swapUsedBytes": 881176879,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795222009.3,
+      "diskUsedBytes": 127988684592,
+      "memAvailableBytes": 5448605631,
+      "swapUsedBytes": 886254809,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795222309.3,
+      "diskUsedBytes": 128000572881,
+      "memAvailableBytes": 5497709691,
+      "swapUsedBytes": 891110685,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795222609.3,
+      "diskUsedBytes": 128008780725,
+      "memAvailableBytes": 5546766512,
+      "swapUsedBytes": 895710580,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795222909.3,
+      "diskUsedBytes": 128013504231,
+      "memAvailableBytes": 5595679131,
+      "swapUsedBytes": 900022687,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795223209.3,
+      "diskUsedBytes": 128015010489,
+      "memAvailableBytes": 5644350856,
+      "swapUsedBytes": 904017571,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795223509.3,
+      "diskUsedBytes": 128013632140,
+      "memAvailableBytes": 5692685453,
+      "swapUsedBytes": 907668420,
+      "busy": 3,
+      "idle": 1
+    },
+    {
+      "at": 1795223809.3,
+      "diskUsedBytes": 128009760593,
+      "memAvailableBytes": 5740587324,
+      "swapUsedBytes": 910951261,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795224109.3,
+      "diskUsedBytes": 128003838050,
+      "memAvailableBytes": 5787961688,
+      "swapUsedBytes": 913845163,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795224409.3,
+      "diskUsedBytes": 127996348503,
+      "memAvailableBytes": 5834714763,
+      "swapUsedBytes": 916332404,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795224709.3,
+      "diskUsedBytes": 127987807868,
+      "memAvailableBytes": 5880753939,
+      "swapUsedBytes": 918398622,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795225009.3,
+      "diskUsedBytes": 127978753472,
+      "memAvailableBytes": 5925987956,
+      "swapUsedBytes": 920032934,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795225309.3,
+      "diskUsedBytes": 127969733112,
+      "memAvailableBytes": 5970327078,
+      "swapUsedBytes": 921228020,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795225609.3,
+      "diskUsedBytes": 127961293892,
+      "memAvailableBytes": 6013683257,
+      "swapUsedBytes": 921980192,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795225909.3,
+      "diskUsedBytes": 127953971074,
+      "memAvailableBytes": 6055970305,
+      "swapUsedBytes": 922289416,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795226209.3,
+      "diskUsedBytes": 127948277178,
+      "memAvailableBytes": 6097104054,
+      "swapUsedBytes": 922159318,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795226509.3,
+      "diskUsedBytes": 127944691536,
+      "memAvailableBytes": 6137002516,
+      "swapUsedBytes": 921597152,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795226809.3,
+      "diskUsedBytes": 127943650524,
+      "memAvailableBytes": 6175586038,
+      "swapUsedBytes": 920613742,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795227109.3,
+      "diskUsedBytes": 127945538680,
+      "memAvailableBytes": 6212777452,
+      "swapUsedBytes": 919223387,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795227409.3,
+      "diskUsedBytes": 127950680864,
+      "memAvailableBytes": 6248502221,
+      "swapUsedBytes": 917443751,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795227709.3,
+      "diskUsedBytes": 127959335637,
+      "memAvailableBytes": 6282688581,
+      "swapUsedBytes": 915295711,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795228009.3,
+      "diskUsedBytes": 127971689998,
+      "memAvailableBytes": 6315267673,
+      "swapUsedBytes": 912803187,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795228309.3,
+      "diskUsedBytes": 127987855575,
+      "memAvailableBytes": 6346173680,
+      "swapUsedBytes": 909992942,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795228609.3,
+      "diskUsedBytes": 128007866344,
+      "memAvailableBytes": 6375343944,
+      "swapUsedBytes": 906894367,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795228909.3,
+      "diskUsedBytes": 128031677943,
+      "memAvailableBytes": 6402719089,
+      "swapUsedBytes": 903539232,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795229209.3,
+      "diskUsedBytes": 128059168575,
+      "memAvailableBytes": 6428243131,
+      "swapUsedBytes": 899961424,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795229509.3,
+      "diskUsedBytes": 128090141486,
+      "memAvailableBytes": 6451863586,
+      "swapUsedBytes": 896196673,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795229809.3,
+      "diskUsedBytes": 128124328978,
+      "memAvailableBytes": 6473531566,
+      "swapUsedBytes": 892282250,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795230109.3,
+      "diskUsedBytes": 128161397861,
+      "memAvailableBytes": 6493201876,
+      "swapUsedBytes": 888256662,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795230409.3,
+      "diskUsedBytes": 128200956237,
+      "memAvailableBytes": 6510833094,
+      "swapUsedBytes": 884159337,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795230709.3,
+      "diskUsedBytes": 128242561493,
+      "memAvailableBytes": 6526387654,
+      "swapUsedBytes": 880030293,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795231009.3,
+      "diskUsedBytes": 128285729313,
+      "memAvailableBytes": 6539831914,
+      "swapUsedBytes": 875909809,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795231309.3,
+      "diskUsedBytes": 128329943544,
+      "memAvailableBytes": 6551136220,
+      "swapUsedBytes": 871838096,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795231609.3,
+      "diskUsedBytes": 128374666715,
+      "memAvailableBytes": 6560274965,
+      "swapUsedBytes": 867854962,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795231909.3,
+      "diskUsedBytes": 128419350989,
+      "memAvailableBytes": 6567226632,
+      "swapUsedBytes": 863999480,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795232209.3,
+      "diskUsedBytes": 128463449316,
+      "memAvailableBytes": 6571973839,
+      "swapUsedBytes": 860309673,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795232509.3,
+      "diskUsedBytes": 128506426588,
+      "memAvailableBytes": 6574503373,
+      "swapUsedBytes": 856822194,
+      "busy": 2,
+      "idle": 2
+    },
+    {
+      "at": 1795232809.3,
+      "diskUsedBytes": 128547770536,
+      "memAvailableBytes": 6574806208,
+      "swapUsedBytes": 853572023,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795233109.3,
+      "diskUsedBytes": 128587002166,
+      "memAvailableBytes": 6572877529,
+      "swapUsedBytes": 850592185,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795233409.3,
+      "diskUsedBytes": 128623685521,
+      "memAvailableBytes": 6568716740,
+      "swapUsedBytes": 847913467,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795233709.3,
+      "diskUsedBytes": 128657436560,
+      "memAvailableBytes": 6562327462,
+      "swapUsedBytes": 845564172,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795234009.3,
+      "diskUsedBytes": 128687930984,
+      "memAvailableBytes": 6553717528,
+      "swapUsedBytes": 843569883,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795234309.3,
+      "diskUsedBytes": 128714910842,
+      "memAvailableBytes": 6542898968,
+      "swapUsedBytes": 841953249,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795234609.3,
+      "diskUsedBytes": 128738189789,
+      "memAvailableBytes": 6529887988,
+      "swapUsedBytes": 840733802,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795234909.3,
+      "diskUsedBytes": 128757656877,
+      "memAvailableBytes": 6514704937,
+      "swapUsedBytes": 839927792,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795235209.3,
+      "diskUsedBytes": 128773278822,
+      "memAvailableBytes": 6497374269,
+      "swapUsedBytes": 839548056,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795235509.3,
+      "diskUsedBytes": 128785100679,
+      "memAvailableBytes": 6477924496,
+      "swapUsedBytes": 839603908,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795235809.3,
+      "diskUsedBytes": 128793244919,
+      "memAvailableBytes": 6456388138,
+      "swapUsedBytes": 840101069,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795236109.3,
+      "diskUsedBytes": 128797908945,
+      "memAvailableBytes": 6432801657,
+      "swapUsedBytes": 841041611,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795236409.3,
+      "diskUsedBytes": 128799361062,
+      "memAvailableBytes": 6407205389,
+      "swapUsedBytes": 842423946,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795236709.3,
+      "diskUsedBytes": 128797935011,
+      "memAvailableBytes": 6379643472,
+      "swapUsedBytes": 844242838,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795237009.3,
+      "diskUsedBytes": 128794023173,
+      "memAvailableBytes": 6350163755,
+      "swapUsedBytes": 846489444,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795237309.3,
+      "diskUsedBytes": 128788068574,
+      "memAvailableBytes": 6318817715,
+      "swapUsedBytes": 849151390,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795237609.3,
+      "diskUsedBytes": 128780555855,
+      "memAvailableBytes": 6285660355,
+      "swapUsedBytes": 852212872,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795237909.3,
+      "diskUsedBytes": 128772001404,
+      "memAvailableBytes": 6250750101,
+      "swapUsedBytes": 855654783,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795238209.3,
+      "diskUsedBytes": 128762942835,
+      "memAvailableBytes": 6214148693,
+      "swapUsedBytes": 859454880,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795238509.3,
+      "diskUsedBytes": 128753928024,
+      "memAvailableBytes": 6175921068,
+      "swapUsedBytes": 863587956,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795238809.3,
+      "diskUsedBytes": 128745503964,
+      "memAvailableBytes": 6136135235,
+      "swapUsedBytes": 868026057,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795239109.3,
+      "diskUsedBytes": 128738205611,
+      "memAvailableBytes": 6094862150,
+      "swapUsedBytes": 872738710,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795239409.3,
+      "diskUsedBytes": 128732544982,
+      "memAvailableBytes": 6052175577,
+      "swapUsedBytes": 877693174,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795239709.3,
+      "diskUsedBytes": 128729000732,
+      "memAvailableBytes": 6008151955,
+      "swapUsedBytes": 882854710,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795240009.3,
+      "diskUsedBytes": 128728008398,
+      "memAvailableBytes": 5962870249,
+      "swapUsedBytes": 888186871,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795240309.3,
+      "diskUsedBytes": 128729951522,
+      "memAvailableBytes": 5916411800,
+      "swapUsedBytes": 893651798,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795240609.3,
+      "diskUsedBytes": 128735153844,
+      "memAvailableBytes": 5868860176,
+      "swapUsedBytes": 899210538,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795240909.3,
+      "diskUsedBytes": 128743872702,
+      "memAvailableBytes": 5820301008,
+      "swapUsedBytes": 904823362,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795241209.3,
+      "diskUsedBytes": 128756293789,
+      "memAvailableBytes": 5770821835,
+      "swapUsedBytes": 910450094,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795241509.3,
+      "diskUsedBytes": 128772527372,
+      "memAvailableBytes": 5720511932,
+      "swapUsedBytes": 916050445,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795241809.3,
+      "diskUsedBytes": 128792606043,
+      "memAvailableBytes": 5669462146,
+      "swapUsedBytes": 921584343,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795242109.3,
+      "diskUsedBytes": 128816484056,
+      "memAvailableBytes": 5617764720,
+      "swapUsedBytes": 927012262,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795242409.3,
+      "diskUsedBytes": 128844038260,
+      "memAvailableBytes": 5565513123,
+      "swapUsedBytes": 932295556,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795242709.3,
+      "diskUsedBytes": 128875070609,
+      "memAvailableBytes": 5512801872,
+      "swapUsedBytes": 937396770,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795243009.3,
+      "diskUsedBytes": 128909312191,
+      "memAvailableBytes": 5459726350,
+      "swapUsedBytes": 942279954,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795243309.3,
+      "diskUsedBytes": 128946428713,
+      "memAvailableBytes": 5406382633,
+      "swapUsedBytes": 946910959,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795243609.3,
+      "diskUsedBytes": 128986027311,
+      "memAvailableBytes": 5352867298,
+      "swapUsedBytes": 951257718,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795243909.3,
+      "diskUsedBytes": 129027664548,
+      "memAvailableBytes": 5299277252,
+      "swapUsedBytes": 955290511,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795244209.3,
+      "diskUsedBytes": 129070855459,
+      "memAvailableBytes": 5245709539,
+      "swapUsedBytes": 958982213,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795244509.3,
+      "diskUsedBytes": 129115083420,
+      "memAvailableBytes": 5192261164,
+      "swapUsedBytes": 962308514,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795244809.3,
+      "diskUsedBytes": 129159810679,
+      "memAvailableBytes": 5139028905,
+      "swapUsedBytes": 965248123,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795245109.3,
+      "diskUsedBytes": 129204489317,
+      "memAvailableBytes": 5086109130,
+      "swapUsedBytes": 967782941,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795245409.3,
+      "diskUsedBytes": 129248572400,
+      "memAvailableBytes": 5033597618,
+      "swapUsedBytes": 969898214,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795245709.3,
+      "diskUsedBytes": 129291525129,
+      "memAvailableBytes": 4981589378,
+      "swapUsedBytes": 971582652,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795246009.3,
+      "diskUsedBytes": 129332835734,
+      "memAvailableBytes": 4930178465,
+      "swapUsedBytes": 972828523,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795246309.3,
+      "diskUsedBytes": 129372025902,
+      "memAvailableBytes": 4879457806,
+      "swapUsedBytes": 973631718,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795246609.3,
+      "diskUsedBytes": 129408660520,
+      "memAvailableBytes": 4829519024,
+      "swapUsedBytes": 973991782,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795246909.3,
+      "diskUsedBytes": 129442356540,
+      "memAvailableBytes": 4780452262,
+      "swapUsedBytes": 973911922,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795247209.3,
+      "diskUsedBytes": 129472790786,
+      "memAvailableBytes": 4732346019,
+      "swapUsedBytes": 973398977,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795247509.3,
+      "diskUsedBytes": 129499706530,
+      "memAvailableBytes": 4685286974,
+      "swapUsedBytes": 972463363,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795247809.3,
+      "diskUsedBytes": 129522918733,
+      "memAvailableBytes": 4639359829,
+      "swapUsedBytes": 971118986,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795248109.3,
+      "diskUsedBytes": 129542317811,
+      "memAvailableBytes": 4594647147,
+      "swapUsedBytes": 969383129,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795248409.3,
+      "diskUsedBytes": 129557871861,
+      "memAvailableBytes": 4551229195,
+      "swapUsedBytes": 967276307,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795248709.3,
+      "diskUsedBytes": 129569627321,
+      "memAvailableBytes": 4509183793,
+      "swapUsedBytes": 964822101,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795249009.3,
+      "diskUsedBytes": 129577708021,
+      "memAvailableBytes": 4468586166,
+      "swapUsedBytes": 962046959,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795249309.3,
+      "diskUsedBytes": 129582312652,
+      "memAvailableBytes": 4429508804,
+      "swapUsedBytes": 958979978,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795249609.3,
+      "diskUsedBytes": 129583710731,
+      "memAvailableBytes": 4392021322,
+      "swapUsedBytes": 955652670,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795249909.3,
+      "diskUsedBytes": 129582237102,
+      "memAvailableBytes": 4356190331,
+      "swapUsedBytes": 952098692,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795250209.3,
+      "diskUsedBytes": 129578285113,
+      "memAvailableBytes": 4322079312,
+      "swapUsedBytes": 948353575,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795250509.3,
+      "diskUsedBytes": 129572298607,
+      "memAvailableBytes": 4289748494,
+      "swapUsedBytes": 944454430,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795250809.3,
+      "diskUsedBytes": 129564762879,
+      "memAvailableBytes": 4259254741,
+      "swapUsedBytes": 940439639,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795251109.3,
+      "diskUsedBytes": 129556194783,
+      "memAvailableBytes": 4230651445,
+      "swapUsedBytes": 936348538,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795251409.3,
+      "diskUsedBytes": 129547132210,
+      "memAvailableBytes": 4203988426,
+      "swapUsedBytes": 932221094,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795251709.3,
+      "diskUsedBytes": 129538123122,
+      "memAvailableBytes": 4179311836,
+      "swapUsedBytes": 928097574,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795252009.3,
+      "diskUsedBytes": 129529714391,
+      "memAvailableBytes": 4156664072,
+      "swapUsedBytes": 924018214,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795252309.3,
+      "diskUsedBytes": 129522440661,
+      "memAvailableBytes": 4136083697,
+      "swapUsedBytes": 920022884,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795252609.3,
+      "diskUsedBytes": 129516813450,
+      "memAvailableBytes": 4117605367,
+      "swapUsedBytes": 916150759,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795252909.3,
+      "diskUsedBytes": 129513310731,
+      "memAvailableBytes": 4101259764,
+      "swapUsedBytes": 912439999,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795253209.3,
+      "diskUsedBytes": 129512367192,
+      "memAvailableBytes": 4087073540,
+      "swapUsedBytes": 908927429,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795253509.3,
+      "diskUsedBytes": 129514365387,
+      "memAvailableBytes": 4075069264,
+      "swapUsedBytes": 905648239,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795253809.3,
+      "diskUsedBytes": 129519627928,
+      "memAvailableBytes": 4065265384,
+      "swapUsedBytes": 902635690,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795254109.3,
+      "diskUsedBytes": 129528410929,
+      "memAvailableBytes": 4057676185,
+      "swapUsedBytes": 899920841,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795254409.3,
+      "diskUsedBytes": 129540898777,
+      "memAvailableBytes": 4052311770,
+      "swapUsedBytes": 897532295,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795254709.3,
+      "diskUsedBytes": 129557200376,
+      "memAvailableBytes": 4049178034,
+      "swapUsedBytes": 895495956,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795255009.3,
+      "diskUsedBytes": 129577346934,
+      "memAvailableBytes": 4048276658,
+      "swapUsedBytes": 893834823,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795255309.3,
+      "diskUsedBytes": 129601291323,
+      "memAvailableBytes": 4049605103,
+      "swapUsedBytes": 892568793,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795255609.3,
+      "diskUsedBytes": 129628909038,
+      "memAvailableBytes": 4053156616,
+      "swapUsedBytes": 891714503,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795255909.3,
+      "diskUsedBytes": 129660000738,
+      "memAvailableBytes": 4058920240,
+      "swapUsedBytes": 891285187,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795256209.3,
+      "diskUsedBytes": 129694296306,
+      "memAvailableBytes": 4066880840,
+      "swapUsedBytes": 891290571,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795256509.3,
+      "diskUsedBytes": 129731460345,
+      "memAvailableBytes": 4077019127,
+      "swapUsedBytes": 891736789,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795256809.3,
+      "diskUsedBytes": 129771099024,
+      "memAvailableBytes": 4089311696,
+      "swapUsedBytes": 892626337,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795257109.3,
+      "diskUsedBytes": 129812768092,
+      "memAvailableBytes": 4103731070,
+      "swapUsedBytes": 893958047,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795257409.3,
+      "diskUsedBytes": 129855981930,
+      "memAvailableBytes": 4120245754,
+      "swapUsedBytes": 895727100,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795257709.3,
+      "diskUsedBytes": 129900223452,
+      "memAvailableBytes": 4138820292,
+      "swapUsedBytes": 897925067,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795258009.3,
+      "diskUsedBytes": 129944954629,
+      "memAvailableBytes": 4159415332,
+      "swapUsedBytes": 900539974,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795258309.3,
+      "diskUsedBytes": 129989627459,
+      "memAvailableBytes": 4181987707,
+      "swapUsedBytes": 903556404,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795258609.3,
+      "diskUsedBytes": 130033695129,
+      "memAvailableBytes": 4206490511,
+      "swapUsedBytes": 906955627,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795258909.3,
+      "diskUsedBytes": 130076623154,
+      "memAvailableBytes": 4232873189,
+      "swapUsedBytes": 910715747,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795259209.3,
+      "diskUsedBytes": 130117900266,
+      "memAvailableBytes": 4261081634,
+      "swapUsedBytes": 914811890,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795259509.3,
+      "diskUsedBytes": 130157048835,
+      "memAvailableBytes": 4291058287,
+      "swapUsedBytes": 919216408,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795259809.3,
+      "diskUsedBytes": 130193634597,
+      "memAvailableBytes": 4322742247,
+      "swapUsedBytes": 923899103,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795260109.3,
+      "diskUsedBytes": 130227275497,
+      "memAvailableBytes": 4356069388,
+      "swapUsedBytes": 928827482,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795260409.3,
+      "diskUsedBytes": 130257649482,
+      "memAvailableBytes": 4390972477,
+      "swapUsedBytes": 933967022,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795260709.3,
+      "diskUsedBytes": 130284501054,
+      "memAvailableBytes": 4427381300,
+      "swapUsedBytes": 939281458,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795261009.3,
+      "diskUsedBytes": 130307646481,
+      "memAvailableBytes": 4465222802,
+      "swapUsedBytes": 944733077,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795261309.3,
+      "diskUsedBytes": 130326977536,
+      "memAvailableBytes": 4504421217,
+      "swapUsedBytes": 950283035,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795261609.3,
+      "diskUsedBytes": 130342463707,
+      "memAvailableBytes": 4544898213,
+      "swapUsedBytes": 955891677,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795261909.3,
+      "diskUsedBytes": 130354152811,
+      "memAvailableBytes": 4586573046,
+      "swapUsedBytes": 961518861,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795262209.3,
+      "diskUsedBytes": 130362170030,
+      "memAvailableBytes": 4629362703,
+      "swapUsedBytes": 967124294,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795262509.3,
+      "diskUsedBytes": 130366715353,
+      "memAvailableBytes": 4673182067,
+      "swapUsedBytes": 972667861,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795262809.3,
+      "diskUsedBytes": 130368059499,
+      "memAvailableBytes": 4717944074,
+      "swapUsedBytes": 978109959,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795263109.3,
+      "diskUsedBytes": 130366538414,
+      "memAvailableBytes": 4763559879,
+      "swapUsedBytes": 983411822,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795263409.3,
+      "diskUsedBytes": 130362546414,
+      "memAvailableBytes": 4809939022,
+      "swapUsedBytes": 988535843,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795263709.3,
+      "diskUsedBytes": 130356528155,
+      "memAvailableBytes": 4856989600,
+      "swapUsedBytes": 993445884,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795264009.3,
+      "diskUsedBytes": 130348969579,
+      "memAvailableBytes": 4904618443,
+      "swapUsedBytes": 998107573,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795264309.3,
+      "diskUsedBytes": 130340388008,
+      "memAvailableBytes": 4952731287,
+      "swapUsedBytes": 1002488591,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795264609.3,
+      "diskUsedBytes": 130331321604,
+      "memAvailableBytes": 5001232952,
+      "swapUsedBytes": 1006558934,
+      "busy": 1,
+      "idle": 3
+    },
+    {
+      "at": 1795264909.3,
+      "diskUsedBytes": 130352257433,
+      "memAvailableBytes": 5046586572,
+      "swapUsedBytes": 966367641,
+      "busy": 1,
+      "idle": 3
+    }
+  ],
+  "scan": {
+    "at": 1795257349.3,
+    "running": false,
+    "actions": [
+      {
+        "id": "tmp-stale",
+        "title": "Old temporary files",
+        "detail": "38 entries in /tmp and /var/tmp that no process uses, untouched for a day (a week in /var/tmp)",
+        "bytes": 8164732811,
+        "risk": "safe",
+        "count": 38,
+        "items": [
+          {
+            "label": "/tmp/build-cache-3f2a",
+            "bytes": 2791728742
+          },
+          {
+            "label": "/tmp/playwright-artifacts-81c0",
+            "bytes": 1503238553
+          },
+          {
+            "label": "/var/tmp/pg-restore-2026-11-02",
+            "bytes": 1181116006
+          },
+          {
+            "label": "/tmp/node-compile-cache",
+            "bytes": 751619276
+          },
+          {
+            "label": "/tmp/tsc-out-7d19",
+            "bytes": 429496729
+          },
+          {
+            "label": "/tmp/core.web-worker.21877",
+            "bytes": 322122547
+          },
+          {
+            "label": "/tmp/upload-0000",
+            "bytes": 53687091
+          },
+          {
+            "label": "/tmp/upload-0001",
+            "bytes": 52613349
+          },
+          {
+            "label": "/tmp/upload-0002",
+            "bytes": 51539607
+          },
+          {
+            "label": "/tmp/upload-0003",
+            "bytes": 50465865
+          },
+          {
+            "label": "/tmp/upload-0004",
+            "bytes": 49392123
+          },
+          {
+            "label": "/tmp/upload-0005",
+            "bytes": 48318382
+          },
+          {
+            "label": "/tmp/upload-0006",
+            "bytes": 47244640
+          },
+          {
+            "label": "/tmp/upload-0007",
+            "bytes": 46170898
+          },
+          {
+            "label": "/tmp/upload-0008",
+            "bytes": 45097156
+          },
+          {
+            "label": "/tmp/upload-0009",
+            "bytes": 44023414
+          },
+          {
+            "label": "/tmp/upload-000a",
+            "bytes": 42949672
+          },
+          {
+            "label": "/tmp/upload-000b",
+            "bytes": 41875931
+          },
+          {
+            "label": "/tmp/upload-000c",
+            "bytes": 40802189
+          },
+          {
+            "label": "/tmp/upload-000d",
+            "bytes": 39728447
+          },
+          {
+            "label": "/tmp/upload-000e",
+            "bytes": 38654705
+          },
+          {
+            "label": "/tmp/upload-000f",
+            "bytes": 37580963
+          },
+          {
+            "label": "/tmp/upload-0010",
+            "bytes": 36507222
+          },
+          {
+            "label": "/tmp/upload-0011",
+            "bytes": 35433480
+          },
+          {
+            "label": "/tmp/upload-0012",
+            "bytes": 34359738
+          }
+        ]
+      },
+      {
+        "id": "docker-images",
+        "title": "Unused Docker images",
+        "detail": "5 images with no container; pulled again when a project asks for them",
+        "bytes": 5261334935,
+        "risk": "review",
+        "count": 5,
+        "items": [
+          {
+            "label": "registry.example.com/web:1.3.0 (8f2c1d9a0b3e)",
+            "bytes": 1395864371
+          },
+          {
+            "label": "registry.example.com/web:1.2.4 (2a7e5c0f9d1b)",
+            "bytes": 1288490188
+          },
+          {
+            "label": "node:20-bookworm (b9e8d7c6a5f4)",
+            "bytes": 1181116006
+          },
+          {
+            "label": "registry.example.com/api:2.0.0-rc.1 (c41b8e2d7f60)",
+            "bytes": 966367641
+          },
+          {
+            "label": "postgres:15-bookworm (6d3f0a1c8e2b)",
+            "bytes": 429496729
+          }
+        ]
+      },
+      {
+        "id": "claude-tmp",
+        "title": "Closed sessions' temporary files",
+        "detail": "4 folders in /tmp/claude-* of sessions that are no longer running",
+        "bytes": 2469606193,
+        "risk": "safe",
+        "count": 4,
+        "items": [
+          {
+            "label": "/tmp/claude-1000/-home-deploy-code-api/0b6f4e2a-9c1d-4f3b-8a7e-5d2c1b0a9f8e",
+            "bytes": 966367641
+          },
+          {
+            "label": "/tmp/claude-1000/-home-deploy-code-web/7e3d2c1b-0a9f-4e8d-b7c6-a5f4e3d2c1b0",
+            "bytes": 751619276
+          },
+          {
+            "label": "/tmp/claude-0/-root-infra/3c2b1a0f-9e8d-4c7b-a6f5-e4d3c2b1a0f9",
+            "bytes": 429496729
+          },
+          {
+            "label": "/tmp/claude-1000/-home-deploy-code-api/9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d",
+            "bytes": 322122547
+          }
+        ]
+      },
+      {
+        "id": "pkg-caches",
+        "title": "npm, pip, yarn and Go caches",
+        "detail": "They rebuild themselves on the next install",
+        "bytes": 2040109464,
+        "risk": "safe",
+        "count": 4,
+        "items": [
+          {
+            "label": "/home/deploy/.npm/_cacache",
+            "bytes": 1181116006
+          },
+          {
+            "label": "/home/deploy/.cache/pip",
+            "bytes": 429496729
+          },
+          {
+            "label": "/root/.cache/go-build",
+            "bytes": 322122547
+          },
+          {
+            "label": "/home/deploy/.cache/yarn",
+            "bytes": 107374182
+          }
+        ]
+      },
+      {
+        "id": "docker-build-cache",
+        "title": "Docker build cache",
+        "detail": "Rebuilt by the next docker build, which runs slower once",
+        "bytes": 1717986918,
+        "risk": "review",
+        "count": 1,
+        "items": [
+          {
+            "label": "Build Cache",
+            "bytes": 1717986918
+          }
+        ]
+      },
+      {
+        "id": "big-logs",
+        "title": "Huge logs",
+        "detail": "2 .log files over 200 MB that no process has open",
+        "bytes": 858993459,
+        "risk": "review",
+        "count": 2,
+        "items": [
+          {
+            "label": "/home/deploy/code/api/logs/debug.log",
+            "bytes": 536870912
+          },
+          {
+            "label": "/var/log/nginx/access.log.1",
+            "bytes": 322122547
+          }
+        ]
+      },
+      {
+        "id": "journal",
+        "title": "System logs (journal)",
+        "detail": "Trims the journal to 200 MB",
+        "bytes": 858993458,
+        "risk": "safe",
+        "count": 3,
+        "items": [
+          {
+            "label": "/var/log/journal/4f1c2b7a9e0d/system@00061f2a-0000000000a1b2c3.journal",
+            "bytes": 322122547
+          },
+          {
+            "label": "/var/log/journal/4f1c2b7a9e0d/system@00061e9b-00000000009a8b7c.journal",
+            "bytes": 322122547
+          },
+          {
+            "label": "/var/log/journal/4f1c2b7a9e0d/user-1000@00061e40-0000000000123abc.journal",
+            "bytes": 214748364
+          }
+        ]
+      },
+      {
+        "id": "claude-versions",
+        "title": "Old Claude Code versions",
+        "detail": "3 versions that no session is running",
+        "bytes": 665719930,
+        "risk": "safe",
+        "count": 3,
+        "items": [
+          {
+            "label": "/home/deploy/.local/share/claude/versions/2.1.301",
+            "bytes": 225485783
+          },
+          {
+            "label": "/home/deploy/.local/share/claude/versions/2.1.297",
+            "bytes": 225485783
+          },
+          {
+            "label": "/root/.local/share/claude/versions/2.1.288",
+            "bytes": 214748364
+          }
+        ]
+      },
+      {
+        "id": "apt-cache",
+        "title": "Packages downloaded by apt",
+        "detail": "5 .deb packages already installed; apt downloads them again when needed",
+        "bytes": 240123902,
+        "risk": "safe",
+        "count": 5,
+        "items": [
+          {
+            "label": "/var/cache/apt/archives/linux-modules-6.8.0-49-generic_6.8.0-49.49_amd64.deb",
+            "bytes": 147010355
+          },
+          {
+            "label": "/var/cache/apt/archives/nodejs_20.18.1-1nodesource1_amd64.deb",
+            "bytes": 33030144
+          },
+          {
+            "label": "/var/cache/apt/archives/docker-ce_27.3.1-1~ubuntu.24.04~noble_amd64.deb",
+            "bytes": 27158118
+          },
+          {
+            "label": "/var/cache/apt/archives/postgresql-16_16.6-0ubuntu0.24.04.1_amd64.deb",
+            "bytes": 17616076
+          },
+          {
+            "label": "/var/cache/apt/archives/linux-image-6.8.0-49-generic_6.8.0-49.49_amd64.deb",
+            "bytes": 15309209
+          }
+        ]
+      }
+    ],
+    "map": {
+      "usedBytes": 127345780326,
+      "groups": [
+        {
+          "id": "docker",
+          "title": "Docker",
+          "hint": "Images, containers and volumes",
+          "bytes": 33715493273,
+          "freeableBytes": 6979321853,
+          "actions": [
+            "docker-images",
+            "docker-build-cache"
+          ],
+          "children": [
+            {
+              "path": "/var/lib/docker/overlay2",
+              "bytes": 26628797235
+            },
+            {
+              "path": "/var/lib/docker/volumes",
+              "bytes": 4402341478
+            },
+            {
+              "path": "/var/lib/docker/buildkit",
+              "bytes": 1825361100
+            },
+            {
+              "path": "/var/lib/containerd",
+              "bytes": 644245094
+            }
+          ]
+        },
+        {
+          "id": "home",
+          "title": "Home folders",
+          "hint": "Each user's files, repos and projects",
+          "bytes": 25984552140,
+          "freeableBytes": 1202590842,
+          "actions": [
+            "claude-versions",
+            "big-logs"
+          ],
+          "children": [
+            {
+              "path": "/home/deploy/code",
+              "bytes": 15998753177
+            },
+            {
+              "path": "/home/deploy/.local",
+              "bytes": 3435973836
+            },
+            {
+              "path": "/home/deploy/backups",
+              "bytes": 3006477107
+            },
+            {
+              "path": "/root/infra",
+              "bytes": 1503238553
+            },
+            {
+              "path": "/home/deploy/.config",
+              "bytes": 429496729
+            },
+            {
+              "path": "/root/.local",
+              "bytes": 322122547
+            }
+          ]
+        },
+        {
+          "id": "temp",
+          "title": "Temporary files",
+          "hint": "/tmp and /var/tmp",
+          "bytes": 13636521164,
+          "freeableBytes": 10634339004,
+          "actions": [
+            "tmp-stale",
+            "claude-tmp"
+          ],
+          "children": [
+            {
+              "path": "/tmp/build-cache-3f2a",
+              "bytes": 2791728742
+            },
+            {
+              "path": "/tmp/claude-1000",
+              "bytes": 2576980377
+            },
+            {
+              "path": "/tmp/playwright-artifacts-81c0",
+              "bytes": 1503238553
+            },
+            {
+              "path": "/var/tmp/pg-restore-2026-11-02",
+              "bytes": 1181116006
+            },
+            {
+              "path": "/tmp/node-compile-cache",
+              "bytes": 751619276
+            },
+            {
+              "path": "/tmp/claude-0",
+              "bytes": 429496729
+            }
+          ]
+        },
+        {
+          "id": "system",
+          "title": "System and programs",
+          "hint": "/usr, /opt, /boot and snaps",
+          "bytes": 12133282611,
+          "freeableBytes": 0,
+          "actions": [],
+          "children": [
+            {
+              "path": "/usr",
+              "bytes": 8482560409
+            },
+            {
+              "path": "/opt",
+              "bytes": 1932735283
+            },
+            {
+              "path": "/snap",
+              "bytes": 1395864371
+            },
+            {
+              "path": "/boot",
+              "bytes": 322122547
+            }
+          ]
+        },
+        {
+          "id": "claude",
+          "title": "Claude Code",
+          "hint": "Session history and settings; the app does not delete it",
+          "bytes": 6549825126,
+          "freeableBytes": 0,
+          "actions": [],
+          "children": [
+            {
+              "path": "/home/deploy/.claude/projects",
+              "bytes": 4939212390
+            },
+            {
+              "path": "/root/.claude/projects",
+              "bytes": 966367641
+            },
+            {
+              "path": "/home/deploy/.claude/shell-snapshots",
+              "bytes": 322122547
+            }
+          ]
+        },
+        {
+          "id": "caches",
+          "title": "Caches",
+          "hint": "npm, pip, apt and others; they rebuild themselves",
+          "bytes": 5798205849,
+          "freeableBytes": 2280233366,
+          "actions": [
+            "pkg-caches",
+            "apt-cache"
+          ],
+          "children": [
+            {
+              "path": "/home/deploy/.npm",
+              "bytes": 1717986918
+            },
+            {
+              "path": "/home/deploy/.cache",
+              "bytes": 1503238553
+            },
+            {
+              "path": "/var/cache/apt",
+              "bytes": 644245094
+            },
+            {
+              "path": "/root/.cache",
+              "bytes": 536870912
+            }
+          ]
+        },
+        {
+          "id": "swap",
+          "title": "Swap",
+          "hint": "RAM overflow: reserved, not for files",
+          "bytes": 4294967296,
+          "freeableBytes": 0,
+          "actions": [],
+          "children": [
+            {
+              "path": "/swapfile",
+              "bytes": 4294967296
+            }
+          ]
+        },
+        {
+          "id": "logs",
+          "title": "Logs",
+          "hint": "/var/log and the system journal",
+          "bytes": 3543348019,
+          "freeableBytes": 1181116005,
+          "actions": [
+            "journal",
+            "big-logs"
+          ],
+          "children": [
+            {
+              "path": "/var/log/journal",
+              "bytes": 2040109465
+            },
+            {
+              "path": "/var/log/nginx",
+              "bytes": 858993459
+            },
+            {
+              "path": "/var/log/postgresql",
+              "bytes": 214748364
+            }
+          ]
+        },
+        {
+          "id": "rest",
+          "title": "Everything else",
+          "hint": "Folders no other group holds",
+          "bytes": 21689584848,
+          "freeableBytes": 0,
+          "actions": [],
+          "children": [
+            {
+              "path": "/srv/web",
+              "bytes": 6871947673
+            },
+            {
+              "path": "/var/lib/postgresql",
+              "bytes": 5476083302
+            },
+            {
+              "path": "/srv/api",
+              "bytes": 2254857830
+            },
+            {
+              "path": "/var/lib/redis",
+              "bytes": 322122547
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

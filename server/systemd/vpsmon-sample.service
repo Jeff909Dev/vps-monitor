@@ -1,0 +1,8 @@
+[Unit]
+Description=vpsmon: record one health sample and start a disk scan when the last one is stale
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/vpsmon sample
+Nice=19
+IOSchedulingClass=idle

@@ -1,0 +1,38 @@
+name: Release
+
+# Pushing a tag like v0.2.0 builds the app and the server installer and opens a
+# draft release with the .zip, the .dmg, vpsmon-install.sh and SHA256SUMS.txt.
+# Check the draft, then publish it by hand. The app tells people to run
+# releases/download/v<version>/vpsmon-install.sh, so that asset name is fixed.
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    runs-on: macos-26
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Check the tag matches VERSION and server/vpsmon
+        run: scripts/check-version.sh "$GITHUB_REF_NAME"
+      - run: make test
+      - run: make dist
+      - run: scripts/verify-dist.sh
+      - uses: actions/attest@v4
+        with:
+          subject-checksums: build/dist/SHA256SUMS.txt
+      - name: Create the draft release
+        working-directory: build/dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --draft --verify-tag --generate-notes \
+            --title "VPS Monitor $GITHUB_REF_NAME" \
+            "VPS-Monitor-$version-mac.zip" "VPS-Monitor-$version-mac.dmg" vpsmon-install.sh SHA256SUMS.txt

@@ -72,8 +72,12 @@ UNIT_RE = re.compile(r"[A-Za-z0-9@_.:\\][A-Za-z0-9@_.:\\-]*")
 WORKER_ID_RE = re.compile(r"worker:(\d+):(\d+)")
 PROC_ID_RE = re.compile(r"proc:(\d+):(\d+)")
 SELF = os.path.realpath(__file__)
-VERSION = "0.2.0"
-SCHEMA = 2
+VERSION = "0.3.0"
+SCHEMA = 3
+# scan.json's own format. It moves only when the scan's shape does: schema 3 changed status, not the scan.
+SCAN_SCHEMA = 2
+# Filesystems that live on a block device: what status lists as disks, besides / (see real_disks).
+DISK_FSTYPES = frozenset({"ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "f2fs"})
 SYSTEMD_UNITS = "/etc/systemd/system"
 
 
@@ -347,8 +351,11 @@ def resume_command(argv: list[str], session_id: str) -> str:
     return shlex.join(["claude", *kept, "--resume", session_id])
 
 
-def growth_per_hour(history: list[dict], now: float) -> float | None:
-    points = [(r["at"] / HOUR, r["diskUsedBytes"]) for r in history if now - DAY <= r["at"] <= now]
+def growth_per_hour(history: list[dict], mount: str, now: float) -> float | None:
+    """Least-squares slope of `mount`'s used bytes over the last day of history, in bytes per hour; None with less
+    than an hour of it."""
+    points = [(r["at"] / HOUR, r["disks"][mount]) for r in history
+              if now - DAY <= r["at"] <= now and mount in r["disks"]]
     if len(points) < 2:
         return None
     xs, ys = zip(*points)
@@ -704,17 +711,65 @@ def read_used_paths(proc: str) -> set[str]:
     return found
 
 
-def read_mounts(proc: str) -> set[str]:
-    points = set()
+@dataclass(frozen=True)
+class Mount:
+    device: str
+    path: str
+    fstype: str
+
+
+def parse_mounts(text: str) -> list[Mount]:
+    """A /proc/<pid>/mounts table, in mount order. Paths escape spaces and other bytes as octal (`\\040`)."""
+    def unescape(field: str) -> str:
+        return re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), field)
+
+    return [Mount(*map(unescape, fields[:3])) for line in text.splitlines() if len(fields := line.split()) >= 3]
+
+
+def read_mount_table(path: str) -> list[Mount]:
     try:
-        with open(f"{proc}/self/mounts") as f:
-            for line in f:
-                fields = line.split()
-                if len(fields) > 1:
-                    points.add(re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), fields[1]))
+        with open(path) as f:
+            return parse_mounts(f.read())
     except OSError:
-        pass
-    return points
+        return []
+
+
+def read_mounts(proc: str) -> set[str]:
+    return {m.path for m in read_mount_table(f"{proc}/self/mounts")}
+
+
+def real_disks(mounts: list[Mount], is_dir: Callable[[str], bool] = os.path.isdir) -> list[Mount]:
+    """The disks status lists: / whatever its filesystem, then one mount per block device, by path.
+
+    A path mounted twice shows its last mount. Only block-device filesystems count (DISK_FSTYPES): never snaps, tmpfs,
+    overlay, proc, sys, cgroup or a network filesystem, whose statvfs can hang on a dead server. /boot and /boot/efi
+    hold the kernel, not data. A mount on a file (Docker's /etc/hosts) is no disk. Bind mounts and Docker volumes
+    repeat a device, so each device keeps its shortest path, and ZFS datasets share their pool's free space, so a pool
+    counts as one device."""
+    visible = {m.path: m for m in mounts}
+    root = visible.get("/", Mount("", "/", ""))
+    others = [m for m in visible.values()
+              if m.path != "/" and m.fstype in DISK_FSTYPES and not within(m.path, "/boot") and is_dir(m.path)]
+    kept: dict[str, Mount] = {}
+    for m in [root, *others]:
+        key = m.device.split("/", 1)[0] if m.fstype == "zfs" else m.device
+        if key not in kept or (len(m.path), m.path) < (len(kept[key].path), kept[key].path):
+            kept[key] = m
+    return sorted(kept.values(), key=lambda m: (m.path != "/", m.path))
+
+
+def read_disks(proc: str) -> list[dict]:
+    """Every real disk (see real_disks) in PID 1's mount table, with its statvfs sizes."""
+    disks = []
+    for m in real_disks(read_mount_table(f"{proc}/1/mounts")):
+        try:
+            usage = disk_usage(m.path)
+        except OSError:
+            if m.path == "/":
+                raise
+            continue
+        disks.append({"mount": m.path, "device": m.device, "fstype": m.fstype, **usage})
+    return disks
 
 
 def acting_uid(path: str) -> int:
@@ -1594,9 +1649,9 @@ def scan_running(paths: Paths) -> bool:
 
 
 def read_scan(paths: Paths) -> dict:
-    """The saved scan, or {} when there is none or an older vpsmon wrote it: the next sample starts a fresh one."""
+    """The saved scan, or {} when there is none or it is in another format: the next sample starts a fresh one."""
     scan = read_json(paths.file("scan.json"))
-    return scan if isinstance(scan, dict) and scan.get("schema") == SCHEMA else {}
+    return scan if isinstance(scan, dict) and scan.get("schema") == SCAN_SCHEMA else {}
 
 
 def last_scan_attempt(paths: Paths) -> float:
@@ -1609,6 +1664,8 @@ def last_scan_attempt(paths: Paths) -> float:
 
 
 def read_history(paths: Paths, since: float) -> list[dict]:
+    """The rows since `since`, oldest first. Rows from 0.2.0 hold only root's used bytes, as diskUsedBytes: they read
+    as `disks: {"/": diskUsedBytes}`, so root's growth carries across the upgrade."""
     rows = []
     try:
         with open(paths.file("history.jsonl")) as f:
@@ -1618,6 +1675,8 @@ def read_history(paths: Paths, since: float) -> list[dict]:
                 except ValueError:
                     continue
                 if isinstance(row, dict) and row.get("at", 0) >= since:
+                    legacy = row.pop("diskUsedBytes", None)
+                    row.setdefault("disks", {} if legacy is None else {"/": legacy})
                     rows.append(row)
     except OSError:
         pass
@@ -1647,9 +1706,7 @@ def cmd_status(paths: Paths, now: float, tr: Text) -> dict:
     workers = sort_workers([worker_view(s, procs, children, now, paths.proc) for s in sessions])
     protected = {s.proc.pid for s in sessions} | {os.getpid()}
     mem = read_meminfo(paths.proc)
-    disk = disk_usage("/")
     history = read_history(paths, now - DAY)
-    growth = growth_per_hour(history, now)
     load = os.getloadavg()
     with open(f"{paths.proc}/uptime") as f:
         uptime = int(float(f.read().split()[0]))
@@ -1670,7 +1727,7 @@ def cmd_status(paths: Paths, now: float, tr: Text) -> dict:
             "swapUsedBytes": mem["SwapTotal"] - mem["SwapFree"],
             **memory_groups(procs, children, protected, paths.proc),
         },
-        "disk": {"mount": "/", **disk, "growthBytesPerHour": growth, "fullInHours": full_in_hours(disk["freeBytes"], growth)},
+        "disks": [with_trend(disk, history, now) for disk in read_disks(paths.proc)],
         "services": read_services(parse_config(read_json(paths.config))["services"]),
         "oomKills": oom_kills(now - DAY),
         "workers": workers,
@@ -1682,6 +1739,11 @@ def cmd_status(paths: Paths, now: float, tr: Text) -> dict:
             "map": map_view(scan.get("map"), actions, tr),
         },
     }
+
+
+def with_trend(disk: dict, history: list[dict], now: float) -> dict:
+    growth = growth_per_hour(history, disk["mount"], now)
+    return {**disk, "growthBytesPerHour": growth, "fullInHours": full_in_hours(disk["freeBytes"], growth)}
 
 
 def start_background_scan(paths: Paths) -> bool:
@@ -1710,7 +1772,7 @@ def cmd_sample(paths: Paths, now: float) -> dict:
     mem = read_meminfo(paths.proc)
     row = {
         "at": round(now, 1),
-        "diskUsedBytes": disk_usage("/")["usedBytes"],
+        "disks": {d["mount"]: d["usedBytes"] for d in read_disks(paths.proc)},
         "memAvailableBytes": mem["MemAvailable"],
         "swapUsedBytes": mem["SwapTotal"] - mem["SwapFree"],
         "busy": sum(s.state == "busy" for s in sessions),
@@ -1800,7 +1862,7 @@ def write_scan(paths: Paths, started: float, actions: list[dict], disk_map: dict
         applied = {k: v for k, v in (previous.get("appliedAt") or {}).items() if v >= started}
         actions = sorted((a for a in actions if a["id"] not in applied), key=lambda a: -a["bytes"])
         scan = {
-            "schema": SCHEMA,
+            "schema": SCAN_SCHEMA,
             "at": round(time.time(), 1),
             "startedAt": started,
             "actions": actions,
@@ -1827,7 +1889,7 @@ def act_disk(paths: Paths, action: DiskAction, dry_run: bool, now: float, tr: Te
     with state_lock(paths, wait=False):
         done, failed = action.apply(live, action.candidates(live) if refs is None else refs)
         freed = sum(i.bytes for i in done)
-        scan = read_scan(paths) or {"schema": SCHEMA}
+        scan = read_scan(paths) or {"schema": SCAN_SCHEMA}
         scan["actions"] = [a for a in scan.get("actions", []) if a.get("id") != action.id]
         scan.setdefault("appliedAt", {})[action.id] = now
         write_json_atomic(paths.file("scan.json"), scan)

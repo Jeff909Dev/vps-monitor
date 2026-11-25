@@ -81,7 +81,7 @@ class Commands(unittest.TestCase):
     def test_version_needs_no_root_and_matches_the_repo(self):
         r = self.run_vpsmon("version")
         version = (HERE.parent / "VERSION").read_text().strip()
-        self.assertEqual((r.returncode, json.loads(r.stdout)), (0, {"ok": True, "version": version, "schema": 2}))
+        self.assertEqual((r.returncode, json.loads(r.stdout)), (0, {"ok": True, "version": version, "schema": 3}))
         self.assertEqual(vpsmon.VERSION, version)
 
     def test_another_user_runs_the_same_command_through_sudo(self):
@@ -180,11 +180,12 @@ class Messages(unittest.TestCase):
         self.assertEqual(json.loads(r.stdout)["ok"], False)
 
 
-def history(rows_per_hour, hours, start_used, per_hour):
+def history(rows_per_hour, hours, start_used, per_hour, mount="/"):
     step = HOUR / rows_per_hour
     n = int(hours * rows_per_hour)
     return [
-        {"at": NOW - (n - 1 - i) * step, "diskUsedBytes": int(start_used + per_hour * (i * step / HOUR) + (i % 3) * 1000)}
+        {"at": NOW - (n - 1 - i) * step,
+         "disks": {mount: int(start_used + per_hour * (i * step / HOUR) + (i % 3) * 1000)}}
         for i in range(n)
     ]
 
@@ -192,21 +193,90 @@ def history(rows_per_hour, hours, start_used, per_hour):
 class Growth(unittest.TestCase):
     def test_slope_over_last_day(self):
         rows = history(12, 24, 290e9, 540e6)
-        self.assertAlmostEqual(vpsmon.growth_per_hour(rows, NOW), 540e6, delta=1e5)
+        self.assertAlmostEqual(vpsmon.growth_per_hour(rows, "/", NOW), 540e6, delta=1e5)
 
     def test_ignores_rows_older_than_a_day(self):
-        old = [{"at": NOW - 30 * HOUR, "diskUsedBytes": 0}]
+        old = [{"at": NOW - 30 * HOUR, "disks": {"/": 0}}]
         rows = old + history(12, 6, 290e9, 100e6)
-        self.assertAlmostEqual(vpsmon.growth_per_hour(rows, NOW), 100e6, delta=1e5)
+        self.assertAlmostEqual(vpsmon.growth_per_hour(rows, "/", NOW), 100e6, delta=1e5)
 
     def test_null_with_less_than_an_hour(self):
-        self.assertIsNone(vpsmon.growth_per_hour(history(12, 0.9, 290e9, 540e6), NOW))
-        self.assertIsNone(vpsmon.growth_per_hour([], NOW))
+        self.assertIsNone(vpsmon.growth_per_hour(history(12, 0.9, 290e9, 540e6), "/", NOW))
+        self.assertIsNone(vpsmon.growth_per_hour([], "/", NOW))
+
+    def test_each_disk_grows_on_its_own_from_the_rows_that_hold_it(self):
+        rows = history(12, 24, 290e9, 540e6)
+        # A volume attached 6 hours ago, which a backup job empties as it goes.
+        attached = {r["at"]: r["disks"] for r in history(12, 6, 50e9, -20e6, "/mnt/data")}
+        for row in rows:
+            row["disks"].update(attached.get(row["at"], {}))
+        self.assertAlmostEqual(vpsmon.growth_per_hour(rows, "/", NOW), 540e6, delta=1e5)
+        self.assertAlmostEqual(vpsmon.growth_per_hour(rows, "/mnt/data", NOW), -20e6, delta=1e5)
+        self.assertIsNone(vpsmon.growth_per_hour(rows, "/mnt/never", NOW))
 
     def test_full_in_hours(self):
         self.assertAlmostEqual(vpsmon.full_in_hours(4_000_000_000, 500_000_000.0), 8.0)
         self.assertIsNone(vpsmon.full_in_hours(4_000_000_000, -1.0))
         self.assertIsNone(vpsmon.full_in_hours(4_000_000_000, None))
+
+
+def mounts(text):
+    return vpsmon.parse_mounts(text.strip().replace("|", "\n"))
+
+
+def disks(table, files=()):
+    return [(m.path, m.device, m.fstype) for m in vpsmon.real_disks(mounts(table), is_dir=lambda p: p not in files)]
+
+
+class RealDisks(unittest.TestCase):
+    """Which mounts of PID 1's table status lists as disks."""
+
+    # An Ubuntu host with a data volume, Docker, snaps, an NFS share and a USB backup disk.
+    HOST = """
+        sysfs /sys sysfs rw,nosuid,nodev,noexec,relatime 0 0
+        proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0
+        udev /dev devtmpfs rw,nosuid,relatime,size=8131564k 0 0
+        /dev/sda1 / ext4 rw,relatime,discard 0 0
+        cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime 0 0
+        tmpfs /run tmpfs rw,nosuid,nodev,size=1630780k,mode=755 0 0
+        /dev/loop0 /snap/core22/1612 squashfs ro,nodev,relatime 0 0
+        /dev/sda16 /boot ext4 rw,relatime 0 0
+        /dev/sda15 /boot/efi vfat rw,relatime,fmask=0077 0 0
+        /dev/sdb /mnt/data ext4 rw,relatime,discard 0 0
+        /dev/sda1 /srv/www ext4 rw,relatime,discard 0 0
+        /dev/sdb /var/lib/docker/volumes/pg/_data ext4 rw,relatime,discard 0 0
+        overlay /var/lib/docker/overlay2/3f2a/merged overlay rw,relatime,lowerdir=/x 0 0
+        nfs.example.com:/export /mnt/nfs nfs4 rw,relatime,vers=4.2 0 0
+        /dev/sdd /etc/hostname ext4 rw,relatime 0 0
+        /dev/sdc /mnt/usb\\040backups xfs rw,relatime 0 0
+        /dev/sde /mnt/old ext4 rw,relatime 0 0
+        /dev/sdf /mnt/old ext4 rw,relatime 0 0
+    """
+
+    def test_root_then_one_mount_per_block_device_by_path(self):
+        self.assertEqual(disks(self.HOST, files={"/etc/hostname"}), [
+            ("/", "/dev/sda1", "ext4"),
+            ("/mnt/data", "/dev/sdb", "ext4"),
+            ("/mnt/old", "/dev/sdf", "ext4"),  # mounted over /dev/sde: the last mount on a path is the one in use
+            ("/mnt/usb backups", "/dev/sdc", "xfs"),
+        ])
+
+    def test_a_device_mounted_twice_keeps_its_shortest_path(self):
+        root, volume, bind = ("/dev/sda1 / ext4 rw 0 0", "/dev/sdb /var/lib/docker/volumes/v/_data ext4 rw 0 0",
+                              "/dev/sdb /srv/data ext4 rw 0 0")
+        for table in (f"{root}|{volume}|{bind}", f"{root}|{bind}|{volume}"):
+            self.assertEqual([path for path, _, _ in disks(table)], ["/", "/srv/data"])
+
+    def test_a_zfs_pool_counts_once(self):
+        table = ("rpool/ROOT/ubuntu_x / zfs rw 0 0|rpool/USERDATA/home /home zfs rw 0 0"
+                 "|bpool/BOOT/ubuntu_x /boot zfs rw 0 0|tank/media /tank/media zfs rw 0 0|tank /tank zfs rw 0 0")
+        self.assertEqual(disks(table), [("/", "rpool/ROOT/ubuntu_x", "zfs"), ("/tank", "tank", "zfs")])
+
+    def test_root_is_listed_whatever_its_filesystem(self):
+        # A Docker container: root is overlay, and Docker bind-mounts single files from the host's disk.
+        container = "overlay / overlay rw 0 0|/dev/sda1 /etc/hosts ext4 rw 0 0|/dev/sda1 /etc/resolv.conf ext4 rw 0 0"
+        self.assertEqual(disks(container, files={"/etc/hosts", "/etc/resolv.conf"}), [("/", "overlay", "overlay")])
+        self.assertEqual(disks(""), [("/", "", "")])
 
 
 class WorkerRules(unittest.TestCase):
@@ -819,6 +889,13 @@ class ProcCase(unittest.TestCase):
                                   proc=str(self.proc.root))
         p = self.proc
         p.add(1, 0, "systemd", 12)
+        # Root and a data volume (a real folder, so statvfs answers), plus what status must leave out.
+        self.data = self.root / "data"
+        self.data.mkdir()
+        (p.root / "1" / "mounts").write_text(
+            "proc /proc proc rw 0 0\n/dev/sda1 / ext4 rw,relatime 0 0\ntmpfs /run tmpfs rw 0 0\n"
+            f"/dev/sdb {self.data} ext4 rw,relatime 0 0\n/dev/sda1 {self.root} ext4 rw,relatime 0 0\n"
+        )
         p.add(2, 0, "kthreadd", None, exe=False)
         p.add(3, 2, "kworker/0:1", None, exe=False)
         p.add(40, 1, "systemd-journal", 60)
@@ -985,8 +1062,8 @@ class Contract(ProcCase):
         disk_map = vpsmon.build_map(vpsmon.parse_du("\n".join(lines[1:])), int(lines[0].split()[-1]), {"/swapfile": 4 * GB})
         os.makedirs(self.paths.state)
         vpsmon.write_scan(self.paths, now - HOUR, actions, disk_map)
-        rows = [{"at": now - (12 - i) * HOUR, "diskUsedBytes": 10**11 + i * 10**8, "memAvailableBytes": 9 * 10**9,
-                 "swapUsedBytes": 0, "busy": 1, "idle": 2} for i in range(12)]
+        rows = [{"at": now - (12 - i) * HOUR, "disks": {"/": 10**11 + i * 10**8, str(self.data): 5 * 10**10},
+                 "memAvailableBytes": 9 * 10**9, "swapUsedBytes": 0, "busy": 1, "idle": 2} for i in range(12)]
         Path(self.paths.file("history.jsonl")).write_text("".join(json.dumps(r) + "\n" for r in rows))
         return vpsmon.cmd_status(self.paths, now, tr)
 
@@ -1003,7 +1080,7 @@ class Contract(ProcCase):
             data = self.status(tr)
             result = self.check(data)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertTrue(result.stdout.startswith("ok: 1 workers, 8 mem groups"), result.stdout)
+            self.assertTrue(result.stdout.startswith("ok: 2 disks, 1 workers, 8 mem groups"), result.stdout)
             self.assertEqual(data["scan"]["actions"][0]["title"], tr("action.tmp-stale.title"))
             temp = next(g for g in data["scan"]["map"]["groups"] if g["id"] == "temp")
             self.assertEqual((temp["title"], temp["actions"]), (tr("map.temp.title"), ["tmp-stale"]))
@@ -1013,14 +1090,16 @@ class Contract(ProcCase):
     def test_drift_is_caught(self):
         data = self.status()
         data["workers"][0]["memoryBytes"] = data["workers"][0].pop("memBytes")
-        data["disk"]["usedBytes"] = 1.5
+        data["disks"][0]["usedBytes"] = 1.5
+        data["history"][0]["disks"]["/"] = "full"
         data["memory"]["totalBytes"] = None
         data["memory"]["groups"][0]["processes"][0]["id"] = "pid:12"
         data["scan"]["actions"][0]["id"] = "retired-tmp"
         data["workers"][0]["state"] = "sleeping"
         result = self.check(data)
         self.assertEqual(result.returncode, 1)
-        for path in ("workers[].memBytes", "workers[].memoryBytes", "disk.usedBytes", "memory.totalBytes",
+        for path in ("workers[].memBytes", "workers[].memoryBytes", "disks[].usedBytes", "history[].disks./",
+                     "memory.totalBytes",
                      "memory.groups[].processes[].id", "scan.actions[].id", "workers[].state"):
             self.assertIn(path, result.stdout)
 
@@ -1038,18 +1117,64 @@ class Contract(ProcCase):
 
     def test_nullable_fields(self):
         data = self.status()
-        data["disk"]["growthBytesPerHour"] = None
-        data["disk"]["fullInHours"] = None
+        data["disks"][0]["growthBytesPerHour"] = None
+        data["disks"][1]["fullInHours"] = None
         data["scan"] = {"at": None, "running": False, "actions": [], "map": {"usedBytes": 0, "groups": []}}
         result = self.check(data)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_every_disk_with_its_own_trend(self):
+        data = self.status()
+        root, volume = data["disks"]
+        self.assertEqual((root["mount"], root["device"], root["fstype"]), ("/", "/dev/sda1", "ext4"))
+        self.assertEqual((volume["mount"], volume["device"]), (str(self.data), "/dev/sdb"))
+        self.assertAlmostEqual(root["growthBytesPerHour"], 10**8, delta=1)
+        self.assertEqual((volume["growthBytesPerHour"], volume["fullInHours"]), (0, None))
+        self.assertEqual(set(data["history"][-1]["disks"]), {"/", str(self.data)})
+
+    def test_history_from_0_2_0_reads_as_roots(self):
+        now = time.time()
+        os.makedirs(self.paths.state)
+        old = [{"at": now - (12 - i) * HOUR, "diskUsedBytes": 10**11 + i * 10**8, "memAvailableBytes": 9 * 10**9,
+                "swapUsedBytes": 0, "busy": 0, "idle": 0} for i in range(11)]
+        new = {**old[-1], "at": now - HOUR / 2, "disks": {"/": 10**11 + 11 * 10**8 + 5 * 10**7, str(self.data): 10**9}}
+        del new["diskUsedBytes"]
+        Path(self.paths.file("history.jsonl")).write_text("".join(json.dumps(r) + "\n" for r in [*old, new]))
+        data = vpsmon.cmd_status(self.paths, now, EN)
+        self.assertAlmostEqual(data["disks"][0]["growthBytesPerHour"], 10**8, delta=1)
+        self.assertIsNone(data["disks"][1]["growthBytesPerHour"])
+        self.assertEqual(data["history"][0]["disks"], {"/": 10**11})
+        self.assertFalse(any("diskUsedBytes" in row for row in data["history"]))
+        result = self.check(data)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_a_sample_records_every_disk(self):
+        now = time.time()
+        os.makedirs(self.paths.state)
+        # A fresh scan, so the sample starts none.
+        Path(self.paths.file("scan.json")).write_text(json.dumps({"schema": 2, "at": now, "actions": []}))
+        out = vpsmon.cmd_sample(self.paths, now)
+        self.assertFalse(out["scanStarted"])
+        row = json.loads(Path(self.paths.file("history.jsonl")).read_text())
+        self.assertEqual(set(row["disks"]), {"/", str(self.data)})
+        self.assertNotIn("diskUsedBytes", row)
+        self.assertGreater(row["disks"]["/"], 0)
+
+    def test_disks_out_of_order_are_caught(self):
+        data = self.status()
+        data["disks"].reverse()
+        data["disks"].append(dict(data["disks"][0]))
+        result = self.check(data)
+        self.assertEqual(result.returncode, 1)
+        for message in ("/ is not first", "not each once, by path", "device /dev/sdb listed twice"):
+            self.assertIn(message, result.stdout)
 
     def test_the_checker_lists_exactly_vpsmons_ids(self):
         checker = load_checker()
         self.assertEqual(checker.ACTION_IDS, {a.id for a in vpsmon.REGISTRY})
         self.assertEqual(checker.MAP_IDS, {g.id for g in vpsmon.MAP_GROUPS})
 
-    @unittest.skipUnless(json.loads(FIXTURE.read_text()).get("schema") == 2, "the app's fixture is not schema 2 yet")
+    @unittest.skipUnless(json.loads(FIXTURE.read_text()).get("schema") == vpsmon.SCHEMA, "the app's fixture is behind")
     def test_the_apps_fixture_meets_the_contract(self):
         result = self.check(json.loads(FIXTURE.read_text()))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

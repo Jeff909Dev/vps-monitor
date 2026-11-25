@@ -1,4 +1,4 @@
-# vpsmon contract (schema 2)
+# vpsmon contract (schema 3)
 
 The Mac app talks to a Linux server only through `vpsmon`, a single Python 3.10+ stdlib script installed at
 `/usr/local/bin/vpsmon`. The app runs it over SSH with a fixed argument vector:
@@ -38,15 +38,19 @@ with an entry per language, so a missing translation fails the tests, not the us
 | `scan` | `scan.json` | minutes | Recomputes the disk actions, saves them, then measures the disk map and saves it, at nice 19 and the idle IO class. A scan that finds another one running returns `{"ok":true,"running":true}` and does nothing. `--background` starts it as the transient unit `vpsmon-scan` (`systemd-run`, so it outlives ssh and the timer), or, without systemd, as a detached child in its own session that logs to `scan.log`, and returns `{"ok":true,"started":true}` or `{"ok":true,"running":true}`. |
 | `act <id>` | what it frees, `scan.json`, audit log | seconds to minutes | Applies one published action: a disk action, `worker:<pid>:<start>` or `proc:<pid>:<start>`. `--dry-run` prints what it would do and changes nothing. The app waits up to an hour. |
 | `uninstall` | removes everything the installer added | seconds | Stops and removes the timer, the units, the sudoers rule, `/etc/vpsmon`, `/var/lib/vpsmon` and the script itself. Keeps `/var/log/vpsmon.log`. Prints `{"ok":true,"removed":[<paths>]}`; a rerun removes nothing. |
-| `version` | nothing | instant | `{"ok":true,"version":"0.2.0","schema":2}`. |
+| `version` | nothing | instant | `{"ok":true,"version":"0.3.0","schema":3}`. |
 
 State lives in `/var/lib/vpsmon/`: `history.jsonl` (only `sample` writes it, kept 7 days) and `scan.json` (written by
-`scan` and `act` under `flock` on `/var/lib/vpsmon/lock`, always tmp + rename). A running scan holds `flock` on
-`/var/lib/vpsmon/scan.lock`, which is what `scan.running` reports. `scan.json` keeps every item of every action
-(status shows 25), the map, and the time each action was last applied, so a scan that started before an `act` does not
-bring that action back. Replan actions (below) store only their biggest 25 items. `scan.json` holds ids, sizes and
-counts but no text: the scan runs from the timer with no language, so `status` renders titles, details and hints in the
-`--lang` of each call. It carries `"schema": 2`; one an older vpsmon wrote is ignored, and the next sample scans again.
+`scan` and `act` under `flock` on `/var/lib/vpsmon/lock`, always tmp + rename). A history row is the shape of
+`status.history`, with `disks` holding the used bytes of each disk `sample` saw. A row that 0.2.0 wrote has
+`diskUsedBytes` instead, the used bytes of `/`: vpsmon reads it as `"disks": {"/": diskUsedBytes}`, so root's growth and
+forecast carry across the upgrade. A running scan holds `flock` on `/var/lib/vpsmon/scan.lock`, which is what
+`scan.running` reports. `scan.json` keeps every item of every action (status shows 25), the map, and the time each
+action was last applied, so a scan that started before an `act` does not bring that action back. Replan actions (below)
+store only their biggest 25 items. `scan.json` holds ids, sizes and counts but no text: the scan runs from the timer
+with no language, so `status` renders titles, details and hints in the `--lang` of each call. It carries `"schema": 2`,
+the version of its own format, which moves only when the scan's shape does (schema 3 of `status` left it as it was). A
+`scan.json` in another format is ignored, and the next sample scans again.
 Audit log: `/var/log/vpsmon.log`, one JSON line per `act` (time, `SUDO_USER`, id, item count, the first 25 items, freed
 bytes, result, and for workers the resume command).
 
@@ -62,9 +66,9 @@ bytes, result, and for workers the resume command).
 
 ```jsonc
 {
-  "schema": 2,
+  "schema": 3,
   "ok": true,
-  "version": "0.2.0",                 // vpsmon's own version; the app offers an update when its bundled copy is newer
+  "version": "0.3.0",                 // vpsmon's own version; the app offers an update when its bundled copy is newer
   "host": "my-vps",                   // socket.gethostname()
   "at": 1795264909.3,
   "uptimeSec": 3283000,
@@ -74,19 +78,49 @@ bytes, result, and for workers the resume command).
     "processBytes": 0,                // sum of every process's RssAnon + VmSwap
     "groups": [ /* MemGroup, biggest first, at most 8 */ ]
   },
-  "disk": {
-    "mount": "/", "totalBytes": 0, "usedBytes": 0, "freeBytes": 0,
-    "growthBytesPerHour": 540000000,  // least-squares slope of usedBytes over the last 24 h of history; null with < 1 h of history
-    "fullInHours": 7.4                // freeBytes / growth when growth > 0, else null
-  },
+  "disks": [ /* Disk: / first, then the other disks by mount path */ ],
   "services": [ { "name": "nginx", "active": true } ],  // see Services
   "oomKills": [ { "at": 1795260000, "process": "node", "pid": 1234 } ],   // last 24 h, newest first
   "workers": [ /* Worker; [] when the host runs no Claude Code sessions */ ],
-  "history": [ { "at": 0, "diskUsedBytes": 0, "memAvailableBytes": 0, "swapUsedBytes": 0, "busy": 1, "idle": 16 } ],  // last 24 h, oldest first
+  "history": [ {                     // last 24 h, oldest first
+    "at": 0,
+    "disks": { "/": 0, "/mnt/data": 0 },  // used bytes by mount; a disk mounted later is missing from older rows
+    "memAvailableBytes": 0, "swapUsedBytes": 0, "busy": 1, "idle": 16
+  } ],
   "scan": { "at": 1795250000, "running": false, "actions": [ /* Action */ ], "map": { /* Map */ } }
   // scan.at is null, actions is [] and map.groups is [] when no scan has ever finished
 }
 ```
+
+### Disk
+
+Every real disk mounted on the server, from PID 1's mount table (`/proc/1/mounts`), with its `statvfs` sizes:
+
+- `/` always, whatever its filesystem (a container's root is `overlay`). With no line for `/` in the table, its `device`
+  and `fstype` are `""`.
+- Then every other mount of a block-device filesystem: `ext2`, `ext3`, `ext4`, `xfs`, `btrfs`, `zfs`, `f2fs`. That
+  leaves out snaps (`squashfs`), `tmpfs`, `overlay`, `proc`, `sysfs`, `cgroup` and network filesystems, whose `statvfs`
+  can hang `status` on a dead server. `/boot` and everything under it (`/boot/efi`) hold the kernel, not data, and a
+  mount on a file (Docker's `/etc/hosts`) is no disk.
+- A path mounted twice is its last mount, the one in use.
+- One entry per device: bind mounts and Docker volumes repeat a device, so each device keeps its shortest mount path
+  (`/` for root's). ZFS datasets share their pool's free space, so the datasets of one pool count as one device
+  (`tank` and `tank/media`).
+- A disk other than `/` whose `statvfs` fails is left out.
+
+```jsonc
+{
+  "mount": "/mnt/data",
+  "device": "/dev/sdb",               // the mount source: a block device, a ZFS dataset
+  "fstype": "ext4",
+  "totalBytes": 0, "usedBytes": 0, "freeBytes": 0,   // statvfs: blocks, blocks - bfree, bavail (df's Size, Used, Avail)
+  "growthBytesPerHour": 540000000,    // least-squares slope of this mount's usedBytes over the last 24 h; null with < 1 h of history
+  "fullInHours": 7.4                  // freeBytes / growth when growth > 0, else null
+}
+```
+
+The disk map and the disk actions are about `/` only: the map measures the root filesystem, and the actions look in
+fixed folders (`/tmp`, `/var`, the homes) that live on `/` on most servers.
 
 ### Services
 
@@ -213,7 +247,7 @@ Actions whose tool is missing (`journalctl`, `apt-get`, `docker`) are never publ
 
 ### Map (disk)
 
-Where the used space goes, in blocks that add up to all of it. The scan measures it with one pass of
+Where the used space of `/` goes, in blocks that add up to all of it. The scan measures it with one pass of
 `du -x -B1 --max-depth=4 --threshold=10M /` (the depth is the deepest a group's children reach). The threshold drops
 directories under 10 MB.
 
@@ -297,7 +331,7 @@ then the snapshotted descendants). `freedBytes` is the tree's `RssAnon + VmSwap`
   writes `/etc/vpsmon/config.json` when it is missing (with `--watch` units, else `{"services": []}`), enables the
   timer, and, with `--user`, adds `<user> ALL=(root) NOPASSWD: /usr/local/bin/vpsmon` to `/etc/sudoers.d/vpsmon`
   (next to other users' lines; mode 0440, checked with `visudo -cf` before it is moved in place). Rerunning changes
-  nothing when everything is current. It prints one JSON line: `{"ok":true,"version":"0.2.0","changed":[…]}`, where
+  nothing when everything is current. It prints one JSON line: `{"ok":true,"version":"0.3.0","changed":[…]}`, where
   `changed` lists the files and folders it wrote and `daemon-reload`, `timer-enabled`, `timer-started`.
 - On a host without systemd (a container) it installs the script and the rest, skips the units and the timer, and
   says so with `no-systemd-timer-skipped` in `changed`, on every run.

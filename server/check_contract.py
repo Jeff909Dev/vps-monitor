@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Check that a `vpsmon status` JSON has exactly the schema-2 shape of docs/contract.md.
+"""Check that a `vpsmon status` JSON has exactly the schema-3 shape of docs/contract.md.
 
 Usage: python3 server/check_contract.py [status.json]      (stdin when no file is given)
        ssh <host> /usr/local/bin/vpsmon status | python3 server/check_contract.py
 
 Every key must exist with the type in SHAPE, and no key may be added. A list in SHAPE gives the shape of each element
-by its first element. Integers stay integers; a float also accepts an integer. Ids must be ones the contract lists or
-match its id patterns. The disk map must add up: its groups sum to usedBytes, no group frees more than it holds, rest
-comes last, and a group only names published actions. Exit 0 when it all holds, 1 when it does not.
+by its first element, and an object whose one key is "*" is a map: any keys, each value of that shape. Integers stay
+integers; a float also accepts an integer. Ids must be ones the contract lists or match its id patterns. The disks
+list / first, then the other mounts by path, each device once. The disk map must add up: its groups sum to usedBytes,
+no group frees more than it holds, rest comes last, and a group only names published actions. Exit 0 when it all
+holds, 1 when it does not.
 """
 
 import json
@@ -15,11 +17,11 @@ import re
 import sys
 from pathlib import Path
 
-SCHEMA = 2
+SCHEMA = 3
 SHAPE = {
-    "schema": 2,
+    "schema": 3,
     "ok": True,
-    "version": "0.2.0",
+    "version": "0.3.0",
     "host": "web-1",
     "at": 0.5,
     "uptimeSec": 0,
@@ -34,7 +36,8 @@ SHAPE = {
             }],
         }],
     },
-    "disk": {"mount": "/", "totalBytes": 0, "usedBytes": 0, "freeBytes": 0, "growthBytesPerHour": 0.5, "fullInHours": 0.5},
+    "disks": [{"mount": "/", "device": "/dev/sda1", "fstype": "ext4", "totalBytes": 0, "usedBytes": 0, "freeBytes": 0,
+               "growthBytesPerHour": 0.5, "fullInHours": 0.5}],
     "services": [{"name": "nginx", "active": True}],
     "oomKills": [{"at": 0.5, "process": "node", "pid": 0}],
     "workers": [{
@@ -42,7 +45,7 @@ SHAPE = {
         "state": "idle", "stateSince": 0.5, "lastActivity": 0.5, "startedAt": 0.5, "memBytes": 0, "processes": 0,
         "sessionId": "", "version": "", "resumeCommand": "", "closable": True,
     }],
-    "history": [{"at": 0.5, "diskUsedBytes": 0, "memAvailableBytes": 0, "swapUsedBytes": 0, "busy": 0, "idle": 0}],
+    "history": [{"at": 0.5, "disks": {"*": 0}, "memAvailableBytes": 0, "swapUsedBytes": 0, "busy": 0, "idle": 0}],
     "scan": {
         "at": 0.5,
         "running": False,
@@ -55,7 +58,7 @@ SHAPE = {
         },
     },
 }
-NULLABLE = {"disk.growthBytesPerHour", "disk.fullInHours", "scan.at"}
+NULLABLE = {"disks[].growthBytesPerHour", "disks[].fullInHours", "scan.at"}
 ACTION_IDS = {
     "tmp-stale", "claude-tmp", "big-logs", "claude-versions", "pkg-caches", "journal", "apt-cache", "docker-images",
     "docker-volumes", "docker-build-cache",
@@ -92,6 +95,8 @@ def shape_errors(expected, actual, path: str) -> list[str]:
         return [] if path in NULLABLE else [f"{path}: null where the contract has {want}"]
     if want != got and not (want == "float" and got == "int"):
         return [f"{path}: {got} where the contract has {want}"]
+    if want == "object" and list(expected) == ["*"]:
+        return [e for k, v in actual.items() for e in shape_errors(expected["*"], v, f"{path}.{k}")]
     if want == "object":
         prefix = f"{path}." if path else ""
         errors = [f"{prefix}{k}: missing" for k in expected if k not in actual]
@@ -107,6 +112,17 @@ def shape_errors(expected, actual, path: str) -> list[str]:
     if pattern is not None and not pattern.fullmatch(actual):
         return [f"{path}: {actual!r} does not match {pattern.pattern}"]
     return []
+
+
+def disk_errors(disks: list[dict]) -> list[str]:
+    mounts, devices = [d["mount"] for d in disks], [d["device"] for d in disks]
+    errors = []
+    if mounts[:1] != ["/"]:
+        errors.append("disks: / is not first")
+    if mounts[1:] != sorted(set(mounts[1:]) - {"/"}):
+        errors.append("disks: the mounts after / are not each once, by path")
+    errors += [f"disks: device {d} listed twice" for d in sorted(set(devices)) if devices.count(d) > 1]
+    return errors
 
 
 def map_errors(scan: dict) -> list[str]:
@@ -140,7 +156,7 @@ def memory_errors(memory: dict) -> list[str]:
 
 def check(actual) -> list[str]:
     errors = sorted(set(shape_errors(SHAPE, actual, "")))
-    return errors or map_errors(actual["scan"]) + memory_errors(actual["memory"])
+    return errors or disk_errors(actual["disks"]) + map_errors(actual["scan"]) + memory_errors(actual["memory"])
 
 
 def main() -> int:
@@ -154,9 +170,9 @@ def main() -> int:
         return 1
     scan = actual["scan"]
     print(
-        f"ok: {len(actual['workers'])} workers, {len(actual['memory']['groups'])} mem groups, "
-        f"{len(actual['services'])} services, {len(scan['actions'])} actions, {len(scan['map']['groups'])} map groups, "
-        f"{len(actual['history'])} history rows"
+        f"ok: {len(actual['disks'])} disks, {len(actual['workers'])} workers, "
+        f"{len(actual['memory']['groups'])} mem groups, {len(actual['services'])} services, "
+        f"{len(scan['actions'])} actions, {len(scan['map']['groups'])} map groups, {len(actual['history'])} history rows"
     )
     return 0
 

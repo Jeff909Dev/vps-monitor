@@ -1,0 +1,41 @@
+name: Bug report
+description: Something in VPS Monitor does not work as described.
+labels: [bug]
+body:
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: Apple menu > About This Mac, for example "macOS 26.1".
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Server distribution
+      description: The first lines of `cat /etc/os-release` on the server, for example "Ubuntu 24.04".
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: VPS Monitor version
+      description: The release you downloaded (for example 0.2.0), or the commit if you built it yourself.
+    validations:
+      required: true
+  - type: input
+    id: vpsmon-version
+    attributes:
+      label: vpsmon version
+      description: The output of `vpsmon version` on the server.
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: |
+        What you did, what you expected, and what happened instead.
+        Output from `vpsmon status` can include host names, user names, paths and commands, so edit those out if you prefer.
+    validations:
+      required: true

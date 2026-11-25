@@ -231,6 +231,21 @@ def disks(table, files=()):
 class RealDisks(unittest.TestCase):
     """Which mounts of PID 1's table status lists as disks."""
 
+    def test_a_volume_bind_mounted_into_docker_keeps_its_own_name(self):
+        # Docker's data moved to a volume and bind-mounted back: the shorter /var/lib/docker is a folder of the volume.
+        table = vpsmon.parse_mountinfo("\n".join([
+            "25 1 8:1 / / rw,relatime shared:1 - ext4 /dev/sda1 rw",
+            "30 25 8:16 / /mnt/data rw,relatime shared:2 - ext4 /dev/sdb rw,discard",
+            "31 25 8:16 /containerd /var/lib/containerd rw,relatime shared:2 - ext4 /dev/sdb rw",
+            "32 25 8:16 /docker /var/lib/docker rw,relatime shared:2 - ext4 /dev/sdb rw",
+            "40 32 0:44 / /var/lib/docker/rootfs/overlayfs/3867 rw,relatime shared:3 - overlay overlay rw",
+            r"41 25 8:17 / /mnt/my\040backup rw - xfs /dev/sdc rw",
+        ]))
+        picked = [(m.path, m.device, m.fstype) for m in vpsmon.real_disks(table, is_dir=lambda p: True)]
+        self.assertEqual(picked, [("/", "/dev/sda1", "ext4"), ("/mnt/data", "/dev/sdb", "ext4"),
+                                  ("/mnt/my backup", "/dev/sdc", "xfs")])
+        self.assertEqual(table[2].root, "/containerd")
+
     # An Ubuntu host with a data volume, Docker, snaps, an NFS share and a USB backup disk.
     HOST = """
         sysfs /sys sysfs rw,nosuid,nodev,noexec,relatime 0 0
@@ -892,9 +907,11 @@ class ProcCase(unittest.TestCase):
         # Root and a data volume (a real folder, so statvfs answers), plus what status must leave out.
         self.data = self.root / "data"
         self.data.mkdir()
-        (p.root / "1" / "mounts").write_text(
-            "proc /proc proc rw 0 0\n/dev/sda1 / ext4 rw,relatime 0 0\ntmpfs /run tmpfs rw 0 0\n"
-            f"/dev/sdb {self.data} ext4 rw,relatime 0 0\n/dev/sda1 {self.root} ext4 rw,relatime 0 0\n"
+        (p.root / "1" / "mountinfo").write_text(
+            "22 1 0:21 / /proc rw - proc proc rw\n25 1 8:1 / / rw,relatime - ext4 /dev/sda1 rw\n"
+            "26 25 0:24 / /run rw - tmpfs tmpfs rw\n"
+            f"27 25 8:16 / {self.data} rw,relatime shared:1 - ext4 /dev/sdb rw\n"
+            f"28 25 8:1 / {self.root} rw,relatime - ext4 /dev/sda1 rw\n"
         )
         p.add(2, 0, "kthreadd", None, exe=False)
         p.add(3, 2, "kworker/0:1", None, exe=False)

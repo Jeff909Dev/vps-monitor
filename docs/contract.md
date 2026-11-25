@@ -94,7 +94,7 @@ bytes, result, and for workers the resume command).
 
 ### Disk
 
-Every real disk mounted on the server, from PID 1's mount table (`/proc/1/mounts`), with its `statvfs` sizes:
+Every real disk mounted on the server, from PID 1's mount table (`/proc/1/mountinfo`), with its `statvfs` sizes:
 
 - `/` always, whatever its filesystem (a container's root is `overlay`). With no line for `/` in the table, its `device`
   and `fstype` are `""`.
@@ -103,8 +103,9 @@ Every real disk mounted on the server, from PID 1's mount table (`/proc/1/mounts
   can hang `status` on a dead server. `/boot` and everything under it (`/boot/efi`) hold the kernel, not data, and a
   mount on a file (Docker's `/etc/hosts`) is no disk.
 - A path mounted twice is its last mount, the one in use.
-- One entry per device: bind mounts and Docker volumes repeat a device, so each device keeps its shortest mount path
-  (`/` for root's). ZFS datasets share their pool's free space, so the datasets of one pool count as one device
+- One entry per device: bind mounts and Docker volumes repeat a device. Each device keeps the mount of its own root
+  (mountinfo's root field `/`) over a bind mount of one of its folders, so a volume also bind-mounted at
+  `/var/lib/docker` is still listed at its own mount point. Among those, the shortest path wins (`/` for root's). ZFS datasets share their pool's free space, so the datasets of one pool count as one device
   (`tank` and `tank/media`).
 - A disk other than `/` whose `statvfs` fails is left out.
 

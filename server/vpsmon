@@ -72,7 +72,7 @@ UNIT_RE = re.compile(r"[A-Za-z0-9@_.:\\][A-Za-z0-9@_.:\\-]*")
 WORKER_ID_RE = re.compile(r"worker:(\d+):(\d+)")
 PROC_ID_RE = re.compile(r"proc:(\d+):(\d+)")
 SELF = os.path.realpath(__file__)
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 SCHEMA = 3
 # scan.json's own format. It moves only when the scan's shape does: schema 3 changed status, not the scan.
 SCAN_SCHEMA = 2
@@ -716,6 +716,8 @@ class Mount:
     device: str
     path: str
     fstype: str
+    # The folder of the filesystem this mount shows: "/" for the disk itself, "/docker" for a bind mount of a folder.
+    root: str = "/"
 
 
 def parse_mounts(text: str) -> list[Mount]:
@@ -726,10 +728,28 @@ def parse_mounts(text: str) -> list[Mount]:
     return [Mount(*map(unescape, fields[:3])) for line in text.splitlines() if len(fields := line.split()) >= 3]
 
 
+def parse_mountinfo(text: str) -> list[Mount]:
+    """A /proc/<pid>/mountinfo table, in mount order: id, parent, major:minor, root, mount point, options, optional
+    fields, "-", fstype, source, super options. Unlike /proc/<pid>/mounts it says which folder a bind mount shows."""
+    def unescape(field: str) -> str:
+        return re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), field)
+
+    mounts = []
+    for line in text.splitlines():
+        fields = line.split()
+        if "-" not in fields[6:]:
+            continue
+        sep = fields.index("-", 6)
+        if len(fields) < sep + 3:
+            continue
+        mounts.append(Mount(unescape(fields[sep + 2]), unescape(fields[4]), fields[sep + 1], unescape(fields[3])))
+    return mounts
+
+
 def read_mount_table(path: str) -> list[Mount]:
     try:
         with open(path) as f:
-            return parse_mounts(f.read())
+            return (parse_mountinfo if path.endswith("mountinfo") else parse_mounts)(f.read())
     except OSError:
         return []
 
@@ -744,7 +764,8 @@ def real_disks(mounts: list[Mount], is_dir: Callable[[str], bool] = os.path.isdi
     A path mounted twice shows its last mount. Only block-device filesystems count (DISK_FSTYPES): never snaps, tmpfs,
     overlay, proc, sys, cgroup or a network filesystem, whose statvfs can hang on a dead server. /boot and /boot/efi
     hold the kernel, not data. A mount on a file (Docker's /etc/hosts) is no disk. Bind mounts and Docker volumes
-    repeat a device, so each device keeps its shortest path, and ZFS datasets share their pool's free space, so a pool
+    repeat a device, so each device keeps the mount of its own root over a bind mount of one of its folders (a volume
+    also bind-mounted at /var/lib/docker stays named after the volume), then its shortest path, and ZFS datasets share their pool's free space, so a pool
     counts as one device."""
     visible = {m.path: m for m in mounts}
     root = visible.get("/", Mount("", "/", ""))
@@ -753,7 +774,8 @@ def real_disks(mounts: list[Mount], is_dir: Callable[[str], bool] = os.path.isdi
     kept: dict[str, Mount] = {}
     for m in [root, *others]:
         key = m.device.split("/", 1)[0] if m.fstype == "zfs" else m.device
-        if key not in kept or (len(m.path), m.path) < (len(kept[key].path), kept[key].path):
+        rank = (m.root != "/", len(m.path), m.path)
+        if key not in kept or rank < (kept[key].root != "/", len(kept[key].path), kept[key].path):
             kept[key] = m
     return sorted(kept.values(), key=lambda m: (m.path != "/", m.path))
 
@@ -761,7 +783,7 @@ def real_disks(mounts: list[Mount], is_dir: Callable[[str], bool] = os.path.isdi
 def read_disks(proc: str) -> list[dict]:
     """Every real disk (see real_disks) in PID 1's mount table, with its statvfs sizes."""
     disks = []
-    for m in real_disks(read_mount_table(f"{proc}/1/mounts")):
+    for m in real_disks(read_mount_table(f"{proc}/1/mountinfo")):
         try:
             usage = disk_usage(m.path)
         except OSError:

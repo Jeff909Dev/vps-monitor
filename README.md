@@ -13,16 +13,16 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/popover.png" width="380" alt="The VPS Monitor popover for a server named web-1. A warning says the disk is 85% full. Below it are the disk, memory, and CPU rows with their charts, four Claude Code sessions, the disk split into groups such as Docker and Home folders, and a list of cleanups with Free buttons">
+  <img src="docs/images/popover.png" width="380" alt="The VPS Monitor popover for a server named web-1. A warning says the disk is 85% full. Below it are rows for the root disk and a 1 TB data volume, memory, and CPU, with their charts, four Claude Code sessions, the disk split into groups such as Docker and Home folders, and a list of cleanups with Free buttons">
 </p>
 
-VPS Monitor watches one Linux server from your Mac's menu bar. It shows the free disk and where the space goes, the RAM that each program uses, the CPU load, failed services, out-of-memory kills, and the Claude Code sessions on the server if it runs any. When the disk or the memory runs short, you free it from the same popover with one confirmed click. The app connects to the server over SSH and runs one script there, `vpsmon`, which it installs. The app is in English and Spanish.
+VPS Monitor watches one Linux server from your Mac's menu bar. It shows the free space on each disk and where the space goes, the RAM that each program uses, the CPU load, failed services, out-of-memory kills, and the Claude Code sessions on the server if it runs any. When the disk or the memory runs short, you free it from the same popover with one confirmed click. The app connects to the server over SSH and runs one script there, `vpsmon`, which it installs. The app is in English and Spanish.
 
 ## Features
 
-- The menu bar shows the worst alert, such as `Disk 92%`, with the icon in orange for a warning and in red for a critical alert.
-- The disk row shows the free space, how fast it fills, and when it will be full at that rate.
-- A disk map splits the used space into groups that add up to all of it, such as Docker, home folders, caches, logs, and temporary files. Click a group to see its biggest folders and what you can free there.
+- The menu bar shows the worst alert, such as `Disk 92%`, or `Disk data 92%` for a disk other than the root, with the icon in orange for a warning and in red for a critical alert.
+- Each disk on the server has its own row with the free space, how fast it fills, and when it will be full at that rate. The root filesystem comes first, then volumes such as `/mnt/data`, named by the last part of their path.
+- A disk map splits the used space of the root filesystem into groups that add up to all of it, such as Docker, home folders, caches, logs, and temporary files. Click a group to see its biggest folders and what you can free there.
 - Click the memory row to see the programs that use the most RAM. Click a program to see its processes.
 - Alerts cover failed systemd units, the units you choose to watch, and processes that the kernel or earlyoom killed for lack of memory.
 - The popover offers ten disk cleanups and can end a process. Each action asks first and lists what it will touch.
@@ -137,7 +137,7 @@ A listed unit that is not active raises a critical alert.
 | `/var/log/vpsmon.log` | One JSON line for each action that vpsmon applies, with the time, the user, the action, what it removed, and how much it freed. |
 | `/etc/sudoers.d/vpsmon` | With `--user`, one line: `<user> ALL=(root) NOPASSWD: /usr/local/bin/vpsmon`. |
 
-A scan measures the root filesystem with `du` and takes a few minutes. It runs at the lowest CPU and disk priority, at nice 19 and in the idle IO class. **Scan again** in the popover starts one by hand.
+A scan measures the root filesystem with `du` and takes a few minutes. The disk map and the cleanups cover the root filesystem, where most of what fills a server lives. Other disks show their free space, growth, forecast, and alerts. It runs at the lowest CPU and disk priority, at nice 19 and in the idle IO class. **Scan again** in the popover starts one by hand.
 
 To remove all of it, see [Uninstall](#uninstall).
 
@@ -188,8 +188,8 @@ The menu bar shows the label of the worst alert. The icon turns orange for a war
 
 | Alert | Warning | Critical |
 | --- | --- | --- |
-| Disk free | under 15% | under 5% |
-| Disk full | | within 24 hours, at the rate of the last 24 hours |
+| Disk free, for each disk | under 15% | under 5% |
+| Disk full, for each disk | | within 24 hours, at the rate of the last 24 hours |
 | RAM available | under 12.5% | under 6.25% |
 | Swap used | over 90% | |
 | A systemd unit | | failed, or watched and not active |

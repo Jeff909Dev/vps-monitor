@@ -292,15 +292,21 @@ struct SegmentBar: View {
     }
 }
 
-/// The disk split into the map's groups, then the free space.
+/// A disk split into the map's groups, or into its used space, then the free space.
 struct DiskBar: View {
     let segments: [Presentation.BarSegment]
     @Environment(\.strings) private var s
 
     var body: some View {
         SegmentBar(parts: segments.map { segment in
-            SegmentBar.Part(color: segment.group.map { Tok.group($0.id) } ?? Tok.track, fraction: segment.fraction,
-                            help: segment.group.map { "\($0.title) · \(s.format.bytes($0.bytes))" } ?? s.disk.freeSpace)
+            switch segment.kind {
+            case .group(let group):
+                SegmentBar.Part(color: Tok.group(group.id), fraction: segment.fraction,
+                                help: "\(group.title) · \(s.format.bytes(group.bytes))")
+            case .used(let bytes):
+                SegmentBar.Part(color: Tok.neutral, fraction: segment.fraction, help: s.disk.used(s.format.bytes(bytes)))
+            case .free: SegmentBar.Part(color: Tok.track, fraction: segment.fraction, help: s.disk.freeSpace)
+            }
         }, label: s.disk.barLabel)
     }
 }

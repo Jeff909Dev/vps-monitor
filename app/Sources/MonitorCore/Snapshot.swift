@@ -11,7 +11,8 @@ public struct Snapshot: Codable, Equatable, Sendable {
     public var uptimeSec: Double
     public var cpu: CPU
     public var memory: Memory
-    public var disk: Disk
+    /// Every real disk on the server: root first, then the others by mount path. The decoder makes sure root is there.
+    public var disks: [Disk]
     public var services: [Service]
     public var oomKills: [OOMKill]
     /// Busy first, then idle longest first: the order the popover shows.
@@ -19,6 +20,9 @@ public struct Snapshot: Codable, Equatable, Sendable {
     /// The last 24 h, oldest first.
     public var history: [HistoryPoint]
     public var scan: Scan
+
+    /// The root filesystem: the disk map and the cleanups are about it.
+    public var rootDisk: Disk { disks[0] }
 }
 
 public struct CPU: Codable, Equatable, Sendable {
@@ -43,8 +47,11 @@ public struct Memory: Codable, Equatable, Sendable {
     public var swapFraction: Double { swapTotalBytes > 0 ? Double(swapUsedBytes) / Double(swapTotalBytes) : 0 }
 }
 
-public struct Disk: Codable, Equatable, Sendable {
+public struct Disk: Codable, Equatable, Sendable, Identifiable {
     public var mount: String
+    /// The mount source: "/dev/sdb", a ZFS dataset.
+    public var device: String
+    public var fstype: String
     public var totalBytes: Int64
     public var usedBytes: Int64
     public var freeBytes: Int64
@@ -60,6 +67,13 @@ public struct Disk: Codable, Equatable, Sendable {
     }
 
     public var freeFraction: Double { 1 - usedFraction }
+
+    public var id: String { mount }
+
+    public var isRoot: Bool { mount == "/" }
+
+    /// What the popover calls a disk other than root: its mount's last component, "data" for /mnt/data.
+    public var name: String { mount.split(separator: "/").last.map(String.init) ?? mount }
 }
 
 /// The processes that share one `comm`.
@@ -132,7 +146,8 @@ public struct Worker: Codable, Equatable, Sendable, Identifiable {
 
 public struct HistoryPoint: Codable, Equatable, Sendable {
     public var at: Double
-    public var diskUsedBytes: Int64
+    /// Used bytes by mount. A disk mounted later is missing from older points.
+    public var disks: [String: Int64]
     public var memAvailableBytes: Int64
     public var swapUsedBytes: Int64
     public var busy: Int
@@ -224,7 +239,7 @@ public struct ActResult: Codable, Equatable, Sendable {
 
 public enum SnapshotDecoding {
     /// The schema this app was written against.
-    public static let schema = 2
+    public static let schema = 3
 
     /// Parses `status` output. A handled server error, another schema and a shape the contract doesn't describe
     /// throw `VPSError`.
@@ -236,7 +251,9 @@ public enum SnapshotDecoding {
             throw .contract(.missing("schema"))
         }
         guard header.schema == schema else { throw .schema(header.schema) }
-        return try decode(Snapshot.self, from: data)
+        let snapshot = try decode(Snapshot.self, from: data)
+        guard snapshot.disks.first?.isRoot == true else { throw .contract(.missing("disks[/]")) }
+        return snapshot
     }
 
     public static func actResult(from data: Data) throws(VPSError) -> ActResult {

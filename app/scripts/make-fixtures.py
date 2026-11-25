@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Writes fixtures/status.json (English) and fixtures/status.es.json (Spanish): one invented host, `web-1`, as
-`vpsmon --lang <en|es> status` would print it (docs/contract.md, schema 2). Both files hold the same numbers; only the
-strings the server translates differ. Deterministic: rerunning rewrites the same bytes.
+`vpsmon --lang <en|es> status` would print it (docs/contract.md, the schema and version of server/vpsmon). Both files
+hold the same numbers; only the strings the server translates differ. Deterministic: rerunning rewrites the same bytes.
 
 Usage: python3 app/scripts/make-fixtures.py
 """
@@ -204,10 +204,18 @@ WORKERS = [
 SESSION_IDS = ["1f0e9d8c-7b6a-4f5e-8d4c-3b2a1f0e9d8c", "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d",
                "9e8d7c6b-5a4f-4e3d-9c2b-1a0f9e8d7c6b", "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f"]
 
-DISK_TOTAL = 150 * GIB
-DISK_USED = int(121.4 * GIB)
-DISK_FREE = int(21.1 * GIB)  # root's reserved blocks make used + free < total, as df shows
-GROWTH = 214_000_000.0
+# The disks: mount, device, total, used, free, growth per hour. Reserved blocks make used + free < total, as df shows.
+# Root fills with the day's builds; a 1 TB volume for backups, mostly empty, as ext4 formats it.
+DISKS = [
+    ("/", "/dev/sda1", 150 * GIB, int(121.4 * GIB), int(21.1 * GIB), 214_000_000.0),
+    ("/mnt/data", "/dev/sdb", int(1006.8 * GIB), int(61.4 * GIB), int(895.1 * GIB), 120_000_000.0),
+]
+
+
+def disks() -> list[dict]:
+    return [{"mount": mount, "device": device, "fstype": "ext4", "totalBytes": total, "usedBytes": used,
+             "freeBytes": free, "growthBytesPerHour": growth, "fullInHours": free / growth}
+            for mount, device, total, used, free, growth in DISKS]
 
 
 def actions(lang: str) -> list[dict]:
@@ -290,18 +298,19 @@ def workers() -> list[dict]:
 
 
 def history() -> list[dict]:
-    """The last 24 h at 5-minute steps, oldest first: the disk creeps up, RAM breathes with the day."""
+    """The last 24 h at 5-minute steps, oldest first: the disks creep up, RAM breathes with the day."""
     rows = []
     for i in range(288):
         at = AT - (287 - i) * 300
         hours_ago = (287 - i) / 12
-        used = DISK_USED - int(GROWTH * hours_ago) + int(180 * MIB * math.sin(i / 7))
+        used = {mount: used - int(growth * hours_ago) + int(180 * MIB * math.sin(i / 7))
+                for mount, _, _, used, _, growth in DISKS}
         avail = int((5.4 + 1.1 * math.sin(i / 23) - 0.6 * (i / 287)) * GIB)
         swap = int((0.7 + 0.2 * (i / 287) + 0.05 * math.sin(i / 11)) * GIB)
         busy = 1 + (1 if 96 <= i < 180 else 0) + (1 if 130 <= i < 150 else 0)
-        rows.append({"at": round(at, 1), "diskUsedBytes": used, "memAvailableBytes": avail, "swapUsedBytes": swap,
+        rows.append({"at": round(at, 1), "disks": used, "memAvailableBytes": avail, "swapUsedBytes": swap,
                      "busy": busy, "idle": 4 - busy})
-    rows[-1]["diskUsedBytes"] = DISK_USED
+    rows[-1]["disks"] = {mount: used for mount, _, _, used, _, _ in DISKS}
     rows[-1]["memAvailableBytes"] = int(4.7 * GIB)
     rows[-1]["swapUsedBytes"] = int(0.9 * GIB)
     rows[-1]["busy"], rows[-1]["idle"] = 1, 3
@@ -311,11 +320,10 @@ def history() -> list[dict]:
 def status(lang: str) -> dict:
     published = actions(lang)
     return {
-        "schema": 2, "ok": True, "version": "0.2.0", "host": "web-1", "at": AT, "uptimeSec": UPTIME,
+        "schema": VPSMON.SCHEMA, "ok": True, "version": VPSMON.VERSION, "host": "web-1", "at": AT, "uptimeSec": UPTIME,
         "cpu": {"cores": 8, "load1": 2.37, "load5": 1.98, "load15": 1.64},
         "memory": memory(),
-        "disk": {"mount": "/", "totalBytes": DISK_TOTAL, "usedBytes": DISK_USED, "freeBytes": DISK_FREE,
-                 "growthBytesPerHour": GROWTH, "fullInHours": DISK_FREE / GROWTH},
+        "disks": disks(),
         "services": [{"name": "nginx", "active": True}, {"name": "postgresql", "active": True},
                      {"name": "docker", "active": True}],
         "oomKills": [{"at": round(AT - 5.2 * 3600, 1), "process": "chrome", "pid": 57012}],

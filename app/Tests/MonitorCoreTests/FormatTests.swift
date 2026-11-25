@@ -74,7 +74,8 @@ struct PresentationTests {
 
     @Test func metricLinesInBothLanguages() throws {
         let s = try Fixture.snapshot()
-        let disk = Presentation.disk(s, alerts: Health.alerts(for: s, en), en)
+        let disk = Presentation.disk(s.rootDisk, alerts: Health.alerts(for: s, en), en)
+        #expect(disk.label == "disk")
         #expect(disk.value == "21.1 GB free of 150 GB")
         #expect(disk.detail == "+204 MB/h · full in ~4 d")
         #expect(disk.level == .warning)
@@ -85,7 +86,14 @@ struct PresentationTests {
         #expect(Presentation.cpu(s, en).value == "load 2.37 on 8 cores")
         #expect(Presentation.uptime(s, en) == "up 37 d")
 
-        let disco = Presentation.disk(s, alerts: Health.alerts(for: s, es), es)
+        let data = Presentation.disk(s.disks[1], alerts: Health.alerts(for: s, en), en)
+        #expect(data.label == "data")
+        #expect(data.value == "895 GB free of 1007 GB")
+        #expect(data.detail == "+114 MB/h · full in ~334 d")
+        #expect(data.level == nil)
+        #expect(Presentation.diskTooltip(s.disks[1]) == "/mnt/data · /dev/sdb · ext4")
+
+        let disco = Presentation.disk(s.rootDisk, alerts: Health.alerts(for: s, es), es)
         #expect(disco.label == "disco")
         #expect(disco.value == "21,1 GB libres de 150 GB")
         #expect(disco.detail == "+204 MB/h · se llena en ~4 d")
@@ -106,7 +114,7 @@ struct PresentationTests {
         #expect(Presentation.menuBar(.live(s, at: now), host: "web-1", iconOnly: true, now: now, en).title == "")
 
         var calm = s
-        calm.disk.freeBytes = 80 * GB
+        calm.disks[0].freeBytes = 80 * GB
         let normal = Presentation.menuBar(.live(calm, at: now), host: "web-1", iconOnly: false, now: now, en)
         #expect(normal.tint == .normal)
         #expect(normal.title == "1/4")

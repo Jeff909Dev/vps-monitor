@@ -48,6 +48,8 @@ enum StringsWalk {
         case let f as Phrase<Int32>: return (f(Int32(x)), [sx])
         case let f as Phrase<String, String>: return (f(a, b), [a, b])
         case let f as Phrase<String?, String>: return (f(a, b), [a, b])
+        case let f as Phrase<String?, String?, String>: return (f(a, b, c), [a, b, c])
+        case let f as Phrase<String?, String, String, String>: return (f(a, b, c, d), [a, b, c, d])
         case let f as Phrase<String, Int>: return (f(a, x), [a, sx])
         case let f as Phrase<Int, Int>: return (f(x, y), [sx, sy])
         case let f as Phrase<Int, String>: return (f(x, a), [sx, a])
@@ -105,7 +107,8 @@ struct StringsTests {
         #expect(es.sessions.idle(3) == "3 paradas")
         #expect(en.setup.connected("web-1", "0.2.0", "85%", 0) == "Connected to web-1 · vpsmon 0.2.0 · disk 85% full")
         #expect(en.setup.connected("web-1", "0.2.0", "85%", 1).hasSuffix("· 1 Claude Code session"))
-        #expect(en.health.fillSentence(nil, "~7 h") == "At the last 24 h's rate, the disk fills up in ~7 h.")
+        #expect(en.health.fillSentence(nil, nil, "~7 h") == "At the last 24 h's rate, the disk fills up in ~7 h.")
+        #expect(es.health.fillSentence("/srv", nil, "~7 h") == "Al ritmo de las últimas 24 h, /srv se llena en ~7 h.")
     }
 
     /// Every error reads as words, in both languages.

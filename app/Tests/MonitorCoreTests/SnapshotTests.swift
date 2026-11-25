@@ -5,11 +5,11 @@ import Testing
 struct SnapshotTests {
     @Test func decodesTheEnglishFixture() throws {
         let s = try Fixture.snapshot()
-        #expect(s.schema == 2)
-        #expect(s.version == "0.2.0")
+        #expect(s.schema == 3)
+        #expect(s.version == "0.3.0")
         #expect(s.host == "web-1")
         #expect(s.cpu.cores == 8)
-        #expect(s.disk.freeBytes == 22_655_952_486)
+        #expect(s.rootDisk.freeBytes == 22_655_952_486)
         #expect(s.services.map(\.name) == ["nginx", "postgresql", "docker"])
         #expect(s.oomKills.first?.process == "chrome")
         #expect(s.workers.map(\.name) == ["api-refactor", "billing-tests", "infra-notes", "docs-site"])
@@ -50,7 +50,7 @@ struct SnapshotTests {
         let en = try Fixture.snapshot(.en)
         let es = try Fixture.snapshot(.es)
         #expect(es.memory == en.memory)
-        #expect(es.disk == en.disk)
+        #expect(es.disks == en.disks)
         #expect(es.workers == en.workers)
         #expect(es.history == en.history)
         #expect(es.scan.actions.map(\.id) == en.scan.actions.map(\.id))
@@ -69,7 +69,46 @@ struct SnapshotTests {
     @Test func diskUsageIsWhatDfCallsUsePercent() throws {
         let s = try Fixture.snapshot()
         // used / (used + free): root's reserved blocks don't count as free.
-        #expect(en.format.percent(s.disk.usedFraction) == "85%")
+        #expect(en.format.percent(s.rootDisk.usedFraction) == "85%")
+    }
+
+    /// Root first, then the other disks by mount; each history point holds every disk it saw.
+    @Test func decodesEveryDisk() throws {
+        let s = try Fixture.snapshot()
+        #expect(s.disks.map(\.mount) == ["/", "/mnt/data"])
+        #expect(s.disks.map(\.device) == ["/dev/sda1", "/dev/sdb"])
+        #expect(s.disks.map(\.fstype) == ["ext4", "ext4"])
+        #expect(s.disks.map(\.isRoot) == [true, false])
+        #expect(s.disks[1].name == "data")
+        #expect(s.disks[1].totalBytes == 1_081_043_268_403)
+        #expect(s.history.allSatisfy { Set($0.disks.keys) == ["/", "/mnt/data"] })
+        #expect(s.history.last?.disks["/mnt/data"] == s.disks[1].usedBytes)
+    }
+
+    /// The decoder makes sure root is there and first, so everything past it can lean on `rootDisk`.
+    @Test func statusWithoutRootFirstBreaksTheContract() throws {
+        var json = try JSONSerialization.jsonObject(with: Fixture.data()) as! [String: Any]
+        json["disks"] = Array((json["disks"] as! [[String: Any]]).reversed())
+        let reversed = try JSONSerialization.data(withJSONObject: json)
+        #expect(throws: VPSError.contract(.missing("disks[/]"))) { try SnapshotDecoding.snapshot(from: reversed) }
+        json["disks"] = []
+        let empty = try JSONSerialization.data(withJSONObject: json)
+        #expect(throws: VPSError.contract(.missing("disks[/]"))) { try SnapshotDecoding.snapshot(from: empty) }
+    }
+
+    /// What a 0.2.0 server prints (one `disk`, schema 2) is a server to update, not a broken answer.
+    @Test func aSchema2ServerIsAServerToUpdate() throws {
+        var json = try JSONSerialization.jsonObject(with: Fixture.data()) as! [String: Any]
+        json["schema"] = 2
+        json["version"] = "0.2.0"
+        json["disk"] = (json.removeValue(forKey: "disks") as! [[String: Any]])[0]
+        let data = try JSONSerialization.data(withJSONObject: json)
+        #expect(throws: VPSError.schema(2)) { try SnapshotDecoding.snapshot(from: data) }
+        let state = SetupState.tested(.failure(.schema(2)), appVersion: "0.3.0")
+        #expect(state == .needsInstall(.schema(2)))
+        #expect(Presentation.setupLine(state, host: "web-1", en)
+            == "web-1 runs a vpsmon that speaks schema 2; this app needs schema 3.")
+        if case .needsInstall(let reason) = state { #expect(Presentation.installButton(reason, en) == en.setup.update) }
     }
 
     @Test func anUnknownWorkerStateOrRiskIsReadSafely() throws {
@@ -91,16 +130,15 @@ struct SnapshotTests {
         var json = try JSONSerialization.jsonObject(with: Fixture.data()) as! [String: Any]
         json["scan"] = ["at": NSNull(), "running": false, "actions": [], "map": ["usedBytes": 0, "groups": []]]
         json["workers"] = []
-        var disk = json["disk"] as! [String: Any]
-        disk["growthBytesPerHour"] = NSNull()
-        disk["fullInHours"] = NSNull()
-        json["disk"] = disk
+        json["disks"] = (json["disks"] as! [[String: Any]]).map { disk in
+            disk.merging(["growthBytesPerHour": NSNull(), "fullInHours": NSNull()]) { $1 }
+        }
         let s = try SnapshotDecoding.snapshot(from: JSONSerialization.data(withJSONObject: json))
         #expect(s.scan.at == nil)
         #expect(s.scan.map.groups.isEmpty)
         #expect(s.workers.isEmpty)
-        #expect(Presentation.diskBar(s).isEmpty)
-        #expect(s.disk.fullInHours == nil)
+        #expect(Presentation.diskBar(s.rootDisk, in: s).map(\.kind) == [.used(s.rootDisk.usedBytes), .free])
+        #expect(s.disks.allSatisfy { $0.fullInHours == nil })
     }
 
     @Test func aHandledServerErrorKeepsItsMessage() {
@@ -111,7 +149,7 @@ struct SnapshotTests {
     }
 
     /// Another schema is not "broken": it is a server to update, even when the rest no longer decodes.
-    @Test(arguments: [1, 3])
+    @Test(arguments: [1, 2, 4])
     func anotherSchemaIsNamedBeforeAnythingElseIsRead(_ schema: Int) throws {
         let data = Data(#"{"ok": true, "schema": \#(schema), "host": "web-1"}"#.utf8)
         #expect(throws: VPSError.schema(schema)) { try SnapshotDecoding.snapshot(from: data) }

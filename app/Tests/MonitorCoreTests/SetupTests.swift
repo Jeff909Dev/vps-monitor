@@ -49,7 +49,7 @@ struct ServerSetupTests {
         // Live at once, without waiting for the next poll.
         #expect(monitor.connection.snapshot == fixture)
         #expect(Presentation.setupLine(setup.state, host: "web-1", en)
-            == "Connected to web-1 · vpsmon 0.2.0 · disk 85% full · 4 Claude Code sessions")
+            == "Connected to web-1 · vpsmon 0.3.0 · disk 85% full · 4 Claude Code sessions")
     }
 
     @Test func aMistypedFormFailsWithoutAsking() async {

@@ -420,19 +420,20 @@ private struct Metrics: View {
     }
 
     var body: some View {
-        let disk = Presentation.disk(snapshot, alerts: alerts, s)
         let memory = Presentation.memory(snapshot, alerts: alerts, s)
         let cpu = Presentation.cpu(snapshot, s)
-        let capacity = Double(snapshot.disk.usedBytes + snapshot.disk.freeBytes)
-        let free = snapshot.history.map { max(0, capacity - Double($0.diskUsedBytes)) }
         VStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 7) {
-                MetricRow(metric: disk) {
-                    Sparkline(values: free, maximum: (free.max() ?? capacity) * 1.08,
-                              color: Tok.level(disk.level, otherwise: Tok.claude))
+            ForEach(snapshot.disks) { disk in
+                let metric = Presentation.disk(disk, alerts: alerts, s)
+                let free = Presentation.freeHistory(disk, snapshot.history)
+                VStack(alignment: .leading, spacing: 7) {
+                    MetricRow(metric: metric) {
+                        Sparkline(values: free, maximum: (free.max() ?? Double(disk.totalBytes)) * 1.08,
+                                  color: Tok.level(metric.level, otherwise: Tok.claude))
+                    }
+                    .help(Presentation.diskTooltip(disk))
+                    DiskBar(segments: Presentation.diskBar(disk, in: snapshot)).padding(.leading, 54)
                 }
-                let bar = Presentation.diskBar(snapshot)
-                if !bar.isEmpty { DiskBar(segments: bar).padding(.leading, 54) }
             }
             VStack(alignment: .leading, spacing: 7) {
                 MetricRow(metric: memory, isOpen: snapshot.memory.groups.isEmpty ? nil : ramOpen,
@@ -482,6 +483,7 @@ private struct MetricRow<Chart: View>: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 0) {
                     Text(metric.label).font(Typo.ui(size: 10)).foregroundStyle(Tok.muted)
+                        .truncationMode(.middle)
                         .frame(width: 54, alignment: .leading)
                     Text(metric.value).fontWeight(.medium)
                     if let isOpen {
@@ -967,7 +969,7 @@ private struct MapGroupRow: View {
                             Text(group.title).lineLimit(1)
                             Spacer(minLength: 6)
                             Text(s.format.bytes(group.bytes)).fontWeight(.medium).fixedSize()
-                            Text(Presentation.share(group.bytes, of: snapshot.disk))
+                            Text(Presentation.share(group.bytes, of: snapshot.rootDisk))
                                 .font(Typo.ui(size: 10))
                                 .foregroundStyle(Tok.muted)
                                 .frame(width: 30, alignment: .trailing)

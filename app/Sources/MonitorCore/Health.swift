@@ -8,7 +8,7 @@ public enum AlertLevel: Int, Comparable, Codable, Sendable {
 }
 
 public struct Alert: Equatable, Sendable, Identifiable {
-    /// Stable across polls ("disk", "swap", "service:docker"), so a notification fires once per alert.
+    /// Stable across polls ("disk:/", "swap", "service:docker"), so a notification fires once per alert.
     public var id: String
     public var level: AlertLevel
     /// For the menu bar: "Disk 99%".
@@ -52,9 +52,9 @@ public enum Health {
     /// An OOM kill this recent is news.
     static let oomWindow: Double = 3_600
 
-    /// One rule per service, then the fixed table.
+    /// One rule per service, two per disk, then the fixed table.
     static func rules(for snapshot: Snapshot) -> [Rule] {
-        snapshot.services.map(serviceRule) + table
+        snapshot.services.map(serviceRule) + snapshot.disks.flatMap(diskRules) + table
     }
 
     static func serviceRule(_ service: Service) -> Rule {
@@ -64,25 +64,34 @@ public enum Health {
              sentence: { _, s in s.health.serviceSentence(service.name) })
     }
 
+    /// How full a disk is, and how soon it fills. Root is "the disk", as on a one-disk server; another disk names
+    /// itself: by its name in the short label, by its mount in the sentence.
+    static func diskRules(_ disk: Disk) -> [Rule] {
+        let name = disk.isRoot ? nil : disk.name
+        let mount = disk.isRoot ? nil : disk.mount
+        return [
+            Rule(id: "disk:\(disk.mount)",
+                 tiers: [
+                    // Shares, not sizes, so a 25 GB disk and a 2 TB disk both warn when they are nearly full.
+                    .critical { _ in disk.freeFraction < 0.05 },
+                    .warning { _ in disk.freeFraction < 0.15 },
+                 ],
+                 short: { _, s in s.health.diskShort(name, s.format.percent(disk.usedFraction)) },
+                 sentence: { _, s in
+                     s.health.diskSentence(mount, s.format.percent(disk.usedFraction), s.format.bytes(disk.freeBytes),
+                                           s.format.bytes(disk.totalBytes))
+                 }),
+            Rule(id: "disk-fill:\(disk.mount)",
+                 tiers: [.critical { _ in (disk.fullInHours ?? .infinity) < 24 }],
+                 short: { _, s in s.health.fillShort(name, s.format.forecast(hours: disk.fullInHours ?? 0)) },
+                 sentence: { _, s in
+                     s.health.fillSentence(mount, disk.growthBytesPerHour.map { s.format.bytes(Int64($0)) },
+                                           s.format.forecast(hours: disk.fullInHours ?? 0))
+                 }),
+        ]
+    }
+
     static let table: [Rule] = [
-        Rule(id: "disk",
-             tiers: [
-                // Shares, not sizes, so a 25 GB disk and a 2 TB disk both warn when they are nearly full.
-                .critical { $0.disk.freeFraction < 0.05 },
-                .warning { $0.disk.freeFraction < 0.15 },
-             ],
-             short: { snap, s in s.health.diskShort(s.format.percent(snap.disk.usedFraction)) },
-             sentence: { snap, s in
-                 s.health.diskSentence(s.format.percent(snap.disk.usedFraction), s.format.bytes(snap.disk.freeBytes),
-                                       s.format.bytes(snap.disk.totalBytes))
-             }),
-        Rule(id: "disk-fill",
-             tiers: [.critical { ($0.disk.fullInHours ?? .infinity) < 24 }],
-             short: { snap, s in s.health.fillShort(s.format.forecast(hours: snap.disk.fullInHours ?? 0)) },
-             sentence: { snap, s in
-                 s.health.fillSentence(snap.disk.growthBytesPerHour.map { s.format.bytes(Int64($0)) },
-                                       s.format.forecast(hours: snap.disk.fullInHours ?? 0))
-             }),
         Rule(id: "ram",
              tiers: [
                 // 2 GB and 4 GB on a 32 GB server, and the same shares on a 4 GB one.

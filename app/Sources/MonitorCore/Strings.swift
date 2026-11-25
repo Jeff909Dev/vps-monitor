@@ -107,12 +107,14 @@ public struct Strings: Sendable {
     public struct HealthText: Sendable {
         public let serviceShort: Phrase<String>
         public let serviceSentence: Phrase<String>
-        public let diskShort: Phrase<String>
-        /// percent, free, total
-        public let diskSentence: Phrase<String, String, String>
-        public let fillShort: Phrase<String>
-        /// growth per hour (nil without a trend), forecast
-        public let fillSentence: Phrase<String?, String>
+        /// The disk's name (nil for root), percent
+        public let diskShort: Phrase<String?, String>
+        /// The disk's mount (nil for root), percent, free, total
+        public let diskSentence: Phrase<String?, String, String, String>
+        /// The disk's name (nil for root), forecast
+        public let fillShort: Phrase<String?, String>
+        /// The disk's mount (nil for root), growth per hour (nil without a trend), forecast
+        public let fillSentence: Phrase<String?, String?, String>
         public let ramShort: Phrase<String>
         public let ramSentence: Phrase<String, String>
         public let swapShort: Phrase<String>
@@ -417,11 +419,16 @@ extension Strings {
         health: HealthText(
             serviceShort: Phrase { "\($0) down" },
             serviceSentence: Phrase { "The \($0) service isn't running." },
-            diskShort: Phrase { "Disk \($0)" },
-            diskSentence: Phrase { "Disk \($0) full: \($1) free of \($2)." },
-            fillShort: Phrase { "Full in \($0)" },
-            fillSentence: Phrase { growth, forecast in
-                "At the last 24 h's rate\(growth.map { " (+\($0)/h)" } ?? ""), the disk fills up in \(forecast)."
+            diskShort: Phrase { name, percent in "Disk \(name.map { "\($0) " } ?? "")\(percent)" },
+            diskSentence: Phrase { mount, percent, free, total in
+                "Disk \(mount.map { "\($0) " } ?? "")\(percent) full: \(free) free of \(total)."
+            },
+            fillShort: Phrase { name, forecast in
+                name.map { "Disk \($0) full in \(forecast)" } ?? "Full in \(forecast)"
+            },
+            fillSentence: Phrase { mount, growth, forecast in
+                "At the last 24 h's rate\(growth.map { " (+\($0)/h)" } ?? ""), \(mount ?? "the disk") fills up in "
+                    + "\(forecast)."
             },
             ramShort: Phrase { "RAM \($0)" },
             ramSentence: Phrase { "Only \($0) of RAM available out of \($1)." },
@@ -670,11 +677,16 @@ extension Strings {
         health: HealthText(
             serviceShort: Phrase { "\($0) caído" },
             serviceSentence: Phrase { "El servicio \($0) no está activo." },
-            diskShort: Phrase { "Disco \($0)" },
-            diskSentence: Phrase { "Disco al \($0): quedan \($1) libres de \($2)." },
-            fillShort: Phrase { "Se llena en \($0)" },
-            fillSentence: Phrase { growth, forecast in
-                "Al ritmo de las últimas 24 h\(growth.map { " (+\($0)/h)" } ?? ""), el disco se llena en \(forecast)."
+            diskShort: Phrase { name, percent in "Disco \(name.map { "\($0) " } ?? "")\(percent)" },
+            diskSentence: Phrase { mount, percent, free, total in
+                "Disco \(mount.map { "\($0) " } ?? "")al \(percent): quedan \(free) libres de \(total)."
+            },
+            fillShort: Phrase { name, forecast in
+                name.map { "Disco \($0) se llena en \(forecast)" } ?? "Se llena en \(forecast)"
+            },
+            fillSentence: Phrase { mount, growth, forecast in
+                "Al ritmo de las últimas 24 h\(growth.map { " (+\($0)/h)" } ?? ""), \(mount ?? "el disco") se llena en "
+                    + "\(forecast)."
             },
             ramShort: Phrase { "RAM \($0)" },
             ramSentence: Phrase { "Solo quedan \($0) de RAM disponibles de \($1)." },

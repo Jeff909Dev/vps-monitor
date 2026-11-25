@@ -10,14 +10,14 @@ struct HealthTests {
         return s
     }
 
-    /// A calm machine: half the disk free, no growth, RAM and swap fine, no kills.
+    /// A calm machine: half of root free, no growth, the data volume mostly empty, RAM and swap fine, no kills.
     func healthy(_ change: (inout Snapshot) -> Void = { _ in }) throws -> Snapshot {
         try snapshot { s in
-            s.disk.totalBytes = 300 * GB
-            s.disk.usedBytes = 150 * GB
-            s.disk.freeBytes = 150 * GB
-            s.disk.growthBytesPerHour = nil
-            s.disk.fullInHours = nil
+            s.disks[0].totalBytes = 300 * GB
+            s.disks[0].usedBytes = 150 * GB
+            s.disks[0].freeBytes = 150 * GB
+            s.disks[0].growthBytesPerHour = nil
+            s.disks[0].fullInHours = nil
             s.memory.availableBytes = 12 * GB
             s.memory.swapUsedBytes = 1 * GB
             s.oomKills = []
@@ -28,12 +28,12 @@ struct HealthTests {
     @Test func theFixtureWarnsOnDiskInBothLanguages() throws {
         let s = try snapshot()
         let alerts = Health.alerts(for: s, en)
-        #expect(alerts.map(\.id) == ["disk"])
+        #expect(alerts.map(\.id) == ["disk:/"])
         #expect(alerts.map(\.level) == [.warning])
         #expect(alerts[0].short == "Disk 85%")
         #expect(alerts[0].sentence == "Disk 85% full: 21.1 GB free of 150 GB.")
         let avisos = Health.alerts(for: s, es)
-        #expect(avisos.map(\.id) == ["disk"])
+        #expect(avisos.map(\.id) == ["disk:/"])
         #expect(avisos[0].sentence == "Disco al 85%: quedan 21,1 GB libres de 150 GB.")
     }
 
@@ -53,24 +53,52 @@ struct HealthTests {
     ] as [(Double, Double, AlertLevel?)])
     func diskThresholds(free: Double, total: Double, expected: AlertLevel?) throws {
         let s = try healthy {
-            $0.disk.totalBytes = Int64(total * Double(GB))
-            $0.disk.freeBytes = Int64(free * Double(GB))
-            $0.disk.usedBytes = $0.disk.totalBytes - $0.disk.freeBytes
+            $0.disks[0].totalBytes = Int64(total * Double(GB))
+            $0.disks[0].freeBytes = Int64(free * Double(GB))
+            $0.disks[0].usedBytes = $0.disks[0].totalBytes - $0.disks[0].freeBytes
         }
-        #expect(Health.alerts(for: s, en).first { $0.id == "disk" }?.level == expected)
+        #expect(Health.alerts(for: s, en).first { $0.id == "disk:/" }?.level == expected)
     }
 
     @Test func fillingWithinADayIsCritical() throws {
         let filling = try healthy {
-            $0.disk.fullInHours = 23
-            $0.disk.growthBytesPerHour = 555_000_000
+            $0.disks[0].fullInHours = 23
+            $0.disks[0].growthBytesPerHour = 555_000_000
         }
         let alerts = Health.alerts(for: filling, en)
-        #expect(alerts.map(\.id) == ["disk-fill"])
+        #expect(alerts.map(\.id) == ["disk-fill:/"])
         #expect(alerts[0].short == "Full in ~23 h")
         #expect(alerts[0].sentence == "At the last 24 h's rate (+529 MB/h), the disk fills up in ~23 h.")
         #expect(Health.alerts(for: filling, es)[0].short == "Se llena en ~23 h")
-        #expect(Health.alerts(for: try healthy { $0.disk.fullInHours = 25 }, en).isEmpty)
+        #expect(Health.alerts(for: try healthy { $0.disks[0].fullInHours = 25 }, en).isEmpty)
+    }
+
+    /// Every disk has its own two alerts, with the same thresholds as root; another disk names itself.
+    @Test func eachDiskAlertsOnItsOwnAndNamesItself() throws {
+        let s = try healthy {
+            $0.disks[1].freeBytes = $0.disks[1].totalBytes * 3 / 100
+            $0.disks[1].usedBytes = $0.disks[1].totalBytes - $0.disks[1].freeBytes
+            $0.disks[1].growthBytesPerHour = 2_000_000_000
+            $0.disks[1].fullInHours = 16
+        }
+        let alerts = Health.alerts(for: s, en)
+        #expect(alerts.map(\.id) == ["disk:/mnt/data", "disk-fill:/mnt/data"])
+        #expect(alerts.map(\.level) == [.critical, .critical])
+        #expect(alerts.map(\.short) == ["Disk data 97%", "Disk data full in ~16 h"])
+        #expect(alerts[0].sentence == "Disk /mnt/data 97% full: 30.2 GB free of 1007 GB.")
+        #expect(alerts[1].sentence == "At the last 24 h's rate (+1.9 GB/h), /mnt/data fills up in ~16 h.")
+        let avisos = Health.alerts(for: s, es)
+        #expect(avisos.map(\.short) == ["Disco data 97%", "Disco data se llena en ~16 h"])
+        #expect(avisos[0].sentence == "Disco /mnt/data al 97%: quedan 30,2 GB libres de 1007 GB.")
+        #expect(avisos[1].sentence == "Al ritmo de las últimas 24 h (+1,9 GB/h), /mnt/data se llena en ~16 h.")
+        // A warning on root and a critical volume: the menu bar names the volume.
+        let both = try snapshot { $0.disks[1] = s.disks[1] }
+        #expect(Health.alerts(for: both, en).map(\.id) == ["disk:/", "disk:/mnt/data", "disk-fill:/mnt/data"])
+        let now = Date(timeIntervalSince1970: both.at + 40)
+        #expect(Presentation.menuBar(.live(both, at: now), host: "web-1", iconOnly: false, now: now, en).title
+            == "Disk data 97%")
+        #expect(Presentation.menuBar(.live(both, at: now), host: "web-1", iconOnly: false, now: now, es).title
+            == "Disco data 97%")
     }
 
     @Test func ramThresholds() throws {

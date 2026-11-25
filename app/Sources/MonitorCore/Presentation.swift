@@ -66,16 +66,16 @@ public enum Presentation {
 
     static func tooltip(_ snapshot: Snapshot, alerts: [Alert], _ s: Strings) -> String {
         let busy = snapshot.workers.filter { $0.state == .busy }.count
-        let head = s.menuBar.summary(snapshot.host, s.format.percent(snapshot.disk.usedFraction),
-                                     s.format.bytes(snapshot.disk.freeBytes))
+        let head = s.menuBar.summary(snapshot.host, s.format.percent(snapshot.rootDisk.usedFraction),
+                                     s.format.bytes(snapshot.rootDisk.freeBytes))
             + (snapshot.workers.isEmpty ? "" : " · " + s.menuBar.sessions(busy, snapshot.workers.count))
         return ([head] + alerts.map(\.sentence)).joined(separator: "\n")
     }
 
     // MARK: Metrics
 
-    public static func disk(_ snapshot: Snapshot, alerts: [Alert], _ s: Strings) -> MetricText {
-        let disk = snapshot.disk
+    /// Root is "disk"; another disk goes by its name.
+    public static func disk(_ disk: Disk, alerts: [Alert], _ s: Strings) -> MetricText {
         var detail: [String] = []
         if let growth = disk.growthBytesPerHour {
             detail.append(growth >= 0 ? "+\(s.format.bytes(Int64(growth)))/h" : "\(s.format.bytes(Int64(growth)))/h")
@@ -83,10 +83,21 @@ public enum Presentation {
             detail.append(s.metrics.noTrend)
         }
         if let hours = disk.fullInHours { detail.append(s.metrics.fullIn(s.format.forecast(hours: hours))) }
-        return MetricText(label: s.metrics.disk,
+        return MetricText(label: disk.isRoot ? s.metrics.disk : disk.name,
                           value: s.metrics.freeOf(s.format.bytes(disk.freeBytes), s.format.bytes(disk.totalBytes)),
                           detail: detail.joined(separator: " · "),
-                          level: level(of: ["disk", "disk-fill"], in: alerts))
+                          level: level(of: ["disk:\(disk.mount)", "disk-fill:\(disk.mount)"], in: alerts))
+    }
+
+    /// The disk's free space at each history point that recorded it, oldest first: its sparkline.
+    public static func freeHistory(_ disk: Disk, _ history: [HistoryPoint]) -> [Double] {
+        let capacity = Double(disk.usedBytes + disk.freeBytes)
+        return history.compactMap { $0.disks[disk.mount] }.map { max(0, capacity - Double($0)) }
+    }
+
+    /// "/mnt/data · /dev/sdb · ext4": where a disk row's name comes from.
+    public static func diskTooltip(_ disk: Disk) -> String {
+        [disk.mount, disk.device, disk.fstype].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     public static func memory(_ snapshot: Snapshot, alerts: [Alert], _ s: Strings) -> MetricText {
@@ -224,7 +235,7 @@ public enum Presentation {
 
     /// "where the 150 GB go"
     public static func mapTitle(_ snapshot: Snapshot, _ s: Strings) -> String {
-        s.disk.mapTitle(s.format.bytes(snapshot.disk.totalBytes))
+        s.disk.mapTitle(s.format.bytes(snapshot.rootDisk.totalBytes))
     }
 
     /// A group's share of the disk, as df counts it (used + free): "28%", "<1%".
@@ -246,20 +257,31 @@ public enum Presentation {
         group.actions.compactMap { id in scan.actions.first { $0.id == id } }
     }
 
-    /// One part of the disk bar: a map group, or the free space (`group` nil).
+    /// One part of a disk bar.
     public struct BarSegment: Equatable, Sendable {
-        public var group: MapGroup?
+        public enum Kind: Equatable, Sendable {
+            /// A group of root's disk map.
+            case group(MapGroup)
+            /// The used space of a disk without a map, in bytes.
+            case used(Int64)
+            case free
+        }
+
+        public var kind: Kind
         public var fraction: Double
     }
 
-    /// The disk bar: what is in use now, split by each group's share of the scanned map, then the free space. The
-    /// fractions add up to 1 (used + free, df's Use%). Empty before the first scan.
-    public static func diskBar(_ snapshot: Snapshot) -> [BarSegment] {
+    /// A disk's bar, whose fractions add up to 1 (used + free, df's Use%). Root, once scanned, splits what is in use
+    /// now by each group's share of the map; any other disk, and root before its first scan, shows used and free.
+    public static func diskBar(_ disk: Disk, in snapshot: Snapshot) -> [BarSegment] {
         let map = snapshot.scan.map
-        guard map.usedBytes > 0, !map.groups.isEmpty else { return [] }
-        let used = snapshot.disk.usedFraction
-        return map.groups.map { BarSegment(group: $0, fraction: used * Double($0.bytes) / Double(map.usedBytes)) }
-            + [BarSegment(group: nil, fraction: snapshot.disk.freeFraction)]
+        let free = BarSegment(kind: .free, fraction: disk.freeFraction)
+        guard disk.isRoot, map.usedBytes > 0, !map.groups.isEmpty else {
+            return [BarSegment(kind: .used(disk.usedBytes), fraction: disk.usedFraction), free]
+        }
+        return map.groups.map {
+            BarSegment(kind: .group($0), fraction: disk.usedFraction * Double($0.bytes) / Double(map.usedBytes))
+        } + [free]
     }
 
     /// Up to `limit` labels for the inline confirmation, and how many more there are.
@@ -284,7 +306,7 @@ public enum Presentation {
         case .idle: return s.settings.requirements
         case .testing: return s.setup.testing(host)
         case .connected(let snapshot):
-            return s.setup.connected(snapshot.host, snapshot.version, s.format.percent(snapshot.disk.usedFraction),
+            return s.setup.connected(snapshot.host, snapshot.version, s.format.percent(snapshot.rootDisk.usedFraction),
                                      snapshot.workers.count)
         case .needsInstall(.missing): return s.setup.missing(host)
         case .needsInstall(.outdated(let server, let app)): return s.setup.outdated(host, server, app)
@@ -327,7 +349,11 @@ public enum Presentation {
             lines.append("\(alert.level == .critical ? "!!" : "! ") \(alert.sentence)")
         }
         lines.append("")
-        for metric in [disk(snap, alerts: alerts, s), memory(snap, alerts: alerts, s), cpu(snap, s)] {
+        for disk in snap.disks {
+            let metric = self.disk(disk, alerts: alerts, s)
+            lines.append(pad(metric.label, 9) + metric.value + " · " + metric.detail + " · " + diskTooltip(disk))
+        }
+        for metric in [memory(snap, alerts: alerts, s), cpu(snap, s)] {
             lines.append(pad(metric.label, 9) + metric.value + " · " + metric.detail)
         }
         if !snap.memory.groups.isEmpty {
@@ -366,7 +392,7 @@ public enum Presentation {
             lines.append("")
             lines.append(mapTitle(snap, s) + " · " + s.disk.used(f.bytes(snap.scan.map.usedBytes)))
             for group in snap.scan.map.groups {
-                lines.append("  " + pad(f.bytes(group.bytes), 9) + pad(share(group.bytes, of: snap.disk), 5)
+                lines.append("  " + pad(f.bytes(group.bytes), 9) + pad(share(group.bytes, of: snap.rootDisk), 5)
                     + group.title + (freeable(group, s).map { " · " + $0 } ?? ""))
                 for child in group.children {
                     lines.append(String(repeating: " ", count: 18) + pad(f.bytes(child.bytes), 9) + child.path)

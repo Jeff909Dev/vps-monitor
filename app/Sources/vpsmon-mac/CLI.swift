@@ -213,7 +213,7 @@ enum CLI {
         let connection: Connection = switch options.connection {
         case "stale": .stale(snapshot, at: received, error: .timedOut(seconds: 30))
         case "unreachable": .unreachable(error: .ssh(.unresolved))
-        case "schema": .unreachable(error: .schema(1))
+        case "schema": .unreachable(error: .schema(SnapshotDecoding.schema - 1))
         default: .live(snapshot, at: received)
         }
         let backend = FixtureBackend(snapshot: snapshot, refusal: .server(s.cli.sampleRefusal))
@@ -245,7 +245,7 @@ enum CLI {
         case "connected": state = .connected(snapshot)
         case "missing": state = .needsInstall(.missing)
         case "outdated": state = .needsInstall(.outdated(server: "0.1.0", app: version))
-        case "schema": state = .needsInstall(.schema(1))
+        case "schema": state = .needsInstall(.schema(SnapshotDecoding.schema - 1))
         case "installing": state = .installing
         case "password":
             state = .needsPassword(command: SetupState.installCommand(version: version,

@@ -6,9 +6,9 @@ struct DiskMapTests {
     /// 270 GB used and 18 GB free now; the scan saw 268 GB in use.
     func snapshot() throws -> Snapshot {
         var s = try Fixture.snapshot()
-        s.disk.usedBytes = 270 * GB
-        s.disk.freeBytes = 18 * GB
-        s.disk.totalBytes = 300 * GB
+        s.disks[0].usedBytes = 270 * GB
+        s.disks[0].freeBytes = 18 * GB
+        s.disks[0].totalBytes = 300 * GB
         s.scan.map = DiskMap(usedBytes: 268 * GB, groups: [
             MapGroup(id: "home", title: "Home folders", hint: "/home/* and /root", bytes: 80 * GB,
                      freeableBytes: 2 * GB, actions: ["claude-versions"],
@@ -25,18 +25,43 @@ struct DiskMapTests {
 
     @Test func theBarSplitsWhatIsUsedNowByTheMapThenShowsTheFreeSpace() throws {
         let s = try snapshot()
-        let bar = Presentation.diskBar(s)
-        #expect(bar.map(\.group?.id) == ["home", "docker", "swap", "rest", nil])
+        let bar = Presentation.diskBar(s.rootDisk, in: s)
+        #expect(bar.map(\.kind) == s.scan.map.groups.map { .group($0) } + [.free])
         #expect(abs(bar.reduce(0) { $0 + $1.fraction } - 1) < 1e-12)
         #expect(abs(bar[0].fraction - 270.0 / 288 * 80 / 268) < 1e-12)
         #expect(abs(bar[4].fraction - 18.0 / 288) < 1e-12)
     }
 
+    /// A disk without a map (any disk but root, and root before its first scan) shows its used space, then the free.
+    @Test func aDiskWithoutAMapShowsUsedThenFree() throws {
+        let s = try snapshot()
+        let data = s.disks[1]
+        let bar = Presentation.diskBar(data, in: s)
+        #expect(bar.map(\.kind) == [.used(data.usedBytes), .free])
+        #expect(abs(bar[0].fraction - data.usedFraction) < 1e-12)
+        var unscanned = s
+        unscanned.scan.map = DiskMap(usedBytes: 0, groups: [])
+        #expect(Presentation.diskBar(s.rootDisk, in: unscanned).map(\.kind) == [.used(270 * GB), .free])
+    }
+
+    /// Each disk's sparkline is its own free space, from the history points that recorded it.
+    @Test func eachDiskDrawsItsOwnFreeSpace() throws {
+        var s = try Fixture.snapshot()
+        let data = s.disks[1]
+        let free = Presentation.freeHistory(data, s.history)
+        #expect(free.count == 288)
+        #expect(free.last == Double(data.freeBytes))
+        // A volume attached an hour ago has an hour of points; root keeps all of its own.
+        for i in s.history.indices.dropLast(12) { s.history[i].disks["/mnt/data"] = nil }
+        #expect(Presentation.freeHistory(data, s.history).count == 12)
+        #expect(Presentation.freeHistory(s.rootDisk, s.history).count == 288)
+    }
+
     @Test func sharesAreOfWhatDfCountsAndFreeableOnlyWhenThereIsSome() throws {
         let s = try snapshot()
-        #expect(Presentation.share(80 * GB, of: s.disk) == "28%")
-        #expect(Presentation.share(GB, of: s.disk) == "<1%")
-        #expect(Presentation.share(0, of: s.disk) == "0%")
+        #expect(Presentation.share(80 * GB, of: s.rootDisk) == "28%")
+        #expect(Presentation.share(GB, of: s.rootDisk) == "<1%")
+        #expect(Presentation.share(0, of: s.rootDisk) == "0%")
         #expect(Presentation.freeable(s.scan.map.groups[0], en) == "2.0 GB can be freed")
         #expect(Presentation.freeable(s.scan.map.groups[0], es) == "2,0 GB liberables")
         #expect(Presentation.freeable(s.scan.map.groups[1], en) == nil)

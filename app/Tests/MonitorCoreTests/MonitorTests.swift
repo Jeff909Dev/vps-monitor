@@ -10,7 +10,7 @@ struct MonitorTests {
 
     var critical: Snapshot {
         var s = fixture
-        s.disk.freeBytes = 4 * GB
+        s.disks[0].freeBytes = 4 * GB
         return s
     }
 
@@ -20,7 +20,7 @@ struct MonitorTests {
         await monitor.refresh()
         #expect(monitor.connection.snapshot == critical)
         #expect(monitor.menuBar.title == "Disk 97%")
-        #expect(recorder.notifications.map(\.id) == ["alert-disk"])
+        #expect(recorder.notifications.map(\.id) == ["alert-disk:/"])
         await monitor.refresh()
         #expect(recorder.notifications.count == 1)
     }
